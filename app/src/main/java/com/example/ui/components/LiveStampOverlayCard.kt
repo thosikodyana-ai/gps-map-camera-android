@@ -113,7 +113,7 @@ private fun Reference1ClassicLiveStamp(
     modifier: Modifier = Modifier
 ) {
     val cardBgColor = Color(0xFF282A2E).copy(alpha = styleConfig.backgroundOpacity.coerceIn(0.40f, 0.95f))
-    val cardShape = RoundedCornerShape(8.dp)
+    val cardShape = RoundedCornerShape(7.dp)
 
     Column(
         horizontalAlignment = Alignment.End,
@@ -126,37 +126,37 @@ private fun Reference1ClassicLiveStamp(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .padding(end = 6.dp)
-                    .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                    .padding(end = 5.dp)
+                    .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
                     .background(cardBgColor)
-                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(13.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .size(11.dp)
+                        .clip(RoundedCornerShape(2.5.dp))
                         .background(Color(0xFF26A69A))
                 ) {
                     Icon(
                         imageVector = Icons.Default.PhotoCamera,
                         contentDescription = null,
                         tint = SignalAmber,
-                        modifier = Modifier.size(9.dp)
+                        modifier = Modifier.size(7.5.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(3.5.dp))
                 Text(
                     text = "GPS Map Camera",
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 9.5.sp
+                    fontSize = 8.2.sp
                 )
             }
         }
 
-        // Main Split Row: Left 1:1 Square Satellite Mini-Map Card + Right Info Card
+        // Main Split Row: Left 1:1 Square Satellite Mini-Map Card + Right Compact Info Card
         Row(
             verticalAlignment = Alignment.Bottom,
             modifier = Modifier
@@ -178,10 +178,10 @@ private fun Reference1ClassicLiveStamp(
                         modifier = Modifier.fillMaxSize()
                     )
                 }
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(5.dp))
             }
 
-            // Right Dark Translucent Card
+            // Right Dark Translucent Card (Compact Low-Profile Strip)
             Column(
                 verticalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier
@@ -190,7 +190,7 @@ private fun Reference1ClassicLiveStamp(
                     .clip(cardShape)
                     .background(cardBgColor)
                     .clickable(onClick = onLocationClick)
-                    .padding(horizontal = 9.dp, vertical = 7.dp)
+                    .padding(horizontal = 7.dp, vertical = 5.dp)
             ) {
                 // Title + Flag
                 val flagSuffix = if (location.showCountryFlag) " \uD83C\uDDEE\uD83C\uDDE9" else ""
@@ -198,35 +198,35 @@ private fun Reference1ClassicLiveStamp(
                     text = "${location.template1Headline}$flagSuffix",
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 14.5.sp,
-                    lineHeight = 16.5.sp,
-                    maxLines = 2,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.2.sp,
+                    lineHeight = 12.5.sp,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(1.dp))
 
                 // Plus Code + Full Address
                 Text(
                     text = location.template1FullAddressWithPlusCode,
                     color = Color(0xFFF3F4F6),
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.2.sp,
-                    lineHeight = 12.2.sp,
-                    maxLines = 3,
+                    fontSize = 8.2.sp,
+                    lineHeight = 9.4.sp,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(1.dp))
 
                 // Lat / Long line
                 Text(
                     text = location.template1LatLongText,
                     color = Color(0xFFF3F4F6),
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.2.sp,
-                    lineHeight = 12.2.sp,
+                    fontSize = 7.8.sp,
+                    lineHeight = 8.8.sp,
                     maxLines = 1
                 )
 
@@ -235,8 +235,8 @@ private fun Reference1ClassicLiveStamp(
                     text = timeConfig.formatTemplate1Timestamp(),
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.2.sp,
-                    lineHeight = 12.2.sp,
+                    fontSize = 7.8.sp,
+                    lineHeight = 8.8.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.clickable(onClick = onTimeClick)
@@ -253,8 +253,8 @@ private fun Reference1ClassicLiveStamp(
                         text = noteDisplay,
                         color = Color(0xFFF3F4F6),
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 10.2.sp,
-                        lineHeight = 12.2.sp,
+                        fontSize = 7.8.sp,
+                        lineHeight = 8.8.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -267,7 +267,7 @@ private fun Reference1ClassicLiveStamp(
 /**
  * 100% Reference Image 2 (Street Map + Telemetry Sensor Icons Style) Live Viewfinder Overlay:
  * - Left separate rounded card: 1:1 Square Light Street Map with Center-Crop (never squished)
- * - Right separate dark translucent card: Full-space proportional telemetry rows & 3 sensor columns
+ * - Right separate dark translucent card: Compact low-profile strip matching BitmapStampRenderer
  */
 @Composable
 private fun Reference2TelemetryLiveStamp(
@@ -280,7 +280,7 @@ private fun Reference2TelemetryLiveStamp(
     modifier: Modifier = Modifier
 ) {
     val cardBgColor = Color(0xFF1C1E22).copy(alpha = styleConfig.backgroundOpacity.coerceIn(0.40f, 0.95f))
-    val cardShape = RoundedCornerShape(10.dp)
+    val cardShape = RoundedCornerShape(8.dp)
 
     Row(
         verticalAlignment = Alignment.Bottom,
@@ -304,7 +304,7 @@ private fun Reference2TelemetryLiveStamp(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(5.dp))
         }
 
         Column(
@@ -315,21 +315,21 @@ private fun Reference2TelemetryLiveStamp(
                 .clip(cardShape)
                 .background(cardBgColor)
                 .clickable(onClick = onLocationClick)
-                .padding(horizontal = 10.dp, vertical = 7.dp)
+                .padding(horizontal = 7.dp, vertical = 5.dp)
         ) {
             // 2-line Address Header
             Text(
                 text = location.template2AddressHeader,
                 color = Color.White,
                 fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Normal,
-                fontSize = 13.sp,
-                lineHeight = 15.2.sp,
+                fontWeight = FontWeight.Bold,
+                fontSize = 9.5.sp,
+                lineHeight = 10.8.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(1.5.dp))
 
             // Row 1: Crosshair + Comma Coordinates
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -337,18 +337,17 @@ private fun Reference2TelemetryLiveStamp(
                     imageVector = Icons.Default.GpsFixed,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(12.dp)
+                    modifier = Modifier.size(9.5.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = location.template2CommaCoordText,
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.5.sp
+                    fontSize = 8.sp,
+                    lineHeight = 9.sp
                 )
             }
-
-            Spacer(modifier = Modifier.height(2.dp))
 
             // Row 2: Clock + Timestamp with GMT offset
             Row(
@@ -359,20 +358,19 @@ private fun Reference2TelemetryLiveStamp(
                     imageVector = Icons.Default.AccessTime,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(12.dp)
+                    modifier = Modifier.size(9.5.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = timeConfig.formatTemplate2Timestamp(),
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.5.sp,
+                    fontSize = 8.sp,
+                    lineHeight = 9.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
-            Spacer(modifier = Modifier.height(2.dp))
 
             // Row 3: Elevation ("44m di atas permukaan laut")
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -380,18 +378,17 @@ private fun Reference2TelemetryLiveStamp(
                     imageVector = Icons.Default.Landscape,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(12.dp)
+                    modifier = Modifier.size(9.5.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = location.template2AltitudeText,
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.5.sp
+                    fontSize = 8.sp,
+                    lineHeight = 9.sp
                 )
             }
-
-            Spacer(modifier = Modifier.height(2.dp))
 
             // Row 4: 3 Sensor Columns ("±2m akurasi" | "45,72 µT" | "12 N")
             Row(
@@ -404,14 +401,15 @@ private fun Reference2TelemetryLiveStamp(
                         imageVector = Icons.Default.GpsFixed,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(11.5.dp)
+                        modifier = Modifier.size(9.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = location.template2AccuracyText,
                         color = Color.White,
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 10.sp
+                        fontSize = 7.8.sp,
+                        lineHeight = 8.8.sp
                     )
                 }
 
@@ -420,14 +418,15 @@ private fun Reference2TelemetryLiveStamp(
                         imageVector = Icons.Default.Sensors,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(11.5.dp)
+                        modifier = Modifier.size(9.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = location.template2MagneticText,
                         color = Color.White,
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 10.sp
+                        fontSize = 7.8.sp,
+                        lineHeight = 8.8.sp
                     )
                 }
 
@@ -436,14 +435,15 @@ private fun Reference2TelemetryLiveStamp(
                         imageVector = Icons.Default.Explore,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(11.5.dp)
+                        modifier = Modifier.size(9.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = location.template2CompassText,
                         color = Color.White,
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 10.sp
+                        fontSize = 7.8.sp,
+                        lineHeight = 8.8.sp
                     )
                 }
             }
