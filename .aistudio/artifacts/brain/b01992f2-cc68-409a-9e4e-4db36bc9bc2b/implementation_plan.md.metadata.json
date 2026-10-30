@@ -1,0 +1,6 @@
+{
+  "summary":  "Updated implementation plan combining the 100% pixel-accurate 2 reference stamp templates (Template 1 Satellite Brebes style & Template 2 Light Street Map + Magnetometer µT style) with the full Interactive Map Location Picker feature (pan, zoom, tap-to-place/drag marker, 'Lokasi Saya' helper, 'Pilih Lokasi / OK' vs 'Batal' transactional state, automatic reverse geocoding + Plus Code, strict protection against GPS overwrite, and Room database persistence including 'location_source').",
+  "updatedAt":  "2026-10-30T14:20:51.172061441Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

@@ -1,0 +1,11 @@
+{
+  "name": "GPS Map Camera",
+  "description": "Offline-first Android GPS Map Camera with custom date/time override, live compass & geocoding, OpenStreetMap/radar mini-map stamp templates, and EXIF metadata integration.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

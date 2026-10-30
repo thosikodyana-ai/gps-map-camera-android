@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">GPS Map Camera</string>
+    <string name="edit_time_button">Edit Waktu</string>
+    <string name="edit_location_button">Edit Lokasi</string>
+    <string name="stamp_style_button">Gaya Stamp</string>
+    <string name="history_gallery_button">Riwayat Foto</string>
+    <string name="pick_gallery_button">Galeri</string>
+    <string name="capture_photo_desc">Ambil Foto dengan Stamp GPS</string>
+    <string name="switch_camera_desc">Ganti Kamera Depan / Belakang</string>
+    <string name="toggle_flash_desc">Atur Mode Lampu Flash</string>
+    <string name="toggle_aspect_ratio_desc">Ubah Rasio Aspek Kamera</string>
+    <string name="reset_now_button">Reset ke Jam Sekarang</string>
+    <string name="save_photo_button">Simpan ke Galeri</string>
+    <string name="share_photo_button">Bagikan Foto</string>
+    <string name="retake_button">Ulangi</string>
+    <string name="sample_photo_button">Foto Uji Lapangan</string>
+</resources>
