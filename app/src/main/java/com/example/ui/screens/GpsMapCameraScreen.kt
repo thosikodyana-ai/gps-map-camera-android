@@ -132,6 +132,7 @@ fun GpsMapCameraScreen(
     val isFrontCamera by viewModel.isFrontCamera.collectAsStateWithLifecycle()
     val miniMapBitmap by viewModel.miniMapBitmap.collectAsStateWithLifecycle()
     val previewStampedBitmap by viewModel.previewStampedBitmap.collectAsStateWithLifecycle()
+    val previewRotationDegrees by viewModel.previewRotationDegrees.collectAsStateWithLifecycle()
     val isRenderingPreview by viewModel.isRenderingPreview.collectAsStateWithLifecycle()
     val isSavingPhoto by viewModel.isSavingPhoto.collectAsStateWithLifecycle()
     val toastMessage by viewModel.toastMessage.collectAsStateWithLifecycle()
@@ -585,12 +586,14 @@ fun GpsMapCameraScreen(
     previewStampedBitmap?.let { stampedBmp ->
         StampedPreviewModal(
             stampedBitmap = stampedBmp,
+            rotationDegrees = previewRotationDegrees,
             isRendering = isRenderingPreview,
             isSaving = isSavingPhoto,
             timeConfig = timeConfig,
             location = locationState,
             onRetakeOrDiscard = viewModel::discardPreview,
             onSaveToGallery = { viewModel.saveCurrentPreviewToGallery() },
+            onRotatePhoto90 = viewModel::rotatePreviewClockwise,
             onOpenTimeEdit = { showTimeModal = true },
             onOpenLocationEdit = { showLocationModal = true },
             onOpenStyleEdit = { showStyleModal = true }

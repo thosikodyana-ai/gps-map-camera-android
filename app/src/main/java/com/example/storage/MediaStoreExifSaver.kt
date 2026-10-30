@@ -171,6 +171,7 @@ object MediaStoreExifSaver {
         val summaryDesc = "${location.fullAddress} | ${location.decimalCoordinatesText} | ${location.projectNote}"
         exif.setAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION, summaryDesc)
         exif.setAttribute(ExifInterface.TAG_SOFTWARE, "GPS Map Camera Android")
+        exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
     }
 
     private fun decimalToRationalDms(coord: Double): String {
@@ -203,25 +204,23 @@ object MediaStoreExifSaver {
             )
         }
 
+    /**
+     * Reads EXIF orientation and GPS coordinates from [uri], then decodes the Bitmap
+     * and physically rotates/flips the pixels (Matrix.postRotate) so raw pixel orientation = 1 (upright).
+     */
     suspend fun decodeBitmapFromUri(context: Context, uri: Uri): Pair<Bitmap?, Pair<Double, Double>?> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val resolver = context.contentResolver
-                var rotation = 0f
+                var exifOrientation = ExifInterface.ORIENTATION_NORMAL
                 var exifLatLon: Pair<Double, Double>? = null
 
                 resolver.openInputStream(uri)?.use { stream ->
                     val exif = ExifInterface(stream)
-                    val orientation = exif.getAttributeInt(
+                    exifOrientation = exif.getAttributeInt(
                         ExifInterface.TAG_ORIENTATION,
                         ExifInterface.ORIENTATION_NORMAL
                     )
-                    rotation = when (orientation) {
-                        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                        else -> 0f
-                    }
                     exif.latLong?.let { arr ->
                         if (arr.size >= 2) {
                             exifLatLon = Pair(arr[0], arr[1])
@@ -233,8 +232,24 @@ object MediaStoreExifSaver {
                     BitmapFactory.decodeStream(stream)
                 } ?: return@withContext Pair(null, null)
 
-                val oriented = if (rotation != 0f) {
-                    val matrix = Matrix().apply { postRotate(rotation) }
+                val matrix = Matrix()
+                when (exifOrientation) {
+                    ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                    ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                    ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                    ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+                    ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+                    ExifInterface.ORIENTATION_TRANSPOSE -> {
+                        matrix.postRotate(90f)
+                        matrix.postScale(-1f, 1f)
+                    }
+                    ExifInterface.ORIENTATION_TRANSVERSE -> {
+                        matrix.postRotate(270f)
+                        matrix.postScale(-1f, 1f)
+                    }
+                }
+
+                val oriented = if (!matrix.isIdentity) {
                     Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true)
                 } else {
                     rawBitmap

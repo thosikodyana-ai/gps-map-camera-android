@@ -181,7 +181,7 @@ private fun Reference1ClassicLiveStamp(
                 Spacer(modifier = Modifier.width(5.dp))
             }
 
-            // Right Dark Translucent Card (Compact Low-Profile Strip)
+            // Right Dark Translucent Card (1:1 Calibrated Proportions)
             Column(
                 verticalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier
@@ -190,43 +190,43 @@ private fun Reference1ClassicLiveStamp(
                     .clip(cardShape)
                     .background(cardBgColor)
                     .clickable(onClick = onLocationClick)
-                    .padding(horizontal = 7.dp, vertical = 5.dp)
+                    .padding(horizontal = 9.dp, vertical = 7.dp)
             ) {
-                // Title + Flag
+                // Title + Flag (up to 2 lines matching original stamp)
                 val flagSuffix = if (location.showCountryFlag) " \uD83C\uDDEE\uD83C\uDDE9" else ""
                 Text(
                     text = "${location.template1Headline}$flagSuffix",
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.2.sp,
-                    lineHeight = 12.5.sp,
-                    maxLines = 1,
+                    fontSize = 13.5.sp,
+                    lineHeight = 15.2.sp,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(1.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 // Plus Code + Full Address
                 Text(
                     text = location.template1FullAddressWithPlusCode,
                     color = Color(0xFFF3F4F6),
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 8.2.sp,
-                    lineHeight = 9.4.sp,
-                    maxLines = 2,
+                    fontSize = 9.6.sp,
+                    lineHeight = 11.5.sp,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(1.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 // Lat / Long line
                 Text(
                     text = location.template1LatLongText,
                     color = Color(0xFFF3F4F6),
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 7.8.sp,
-                    lineHeight = 8.8.sp,
+                    fontSize = 9.0.sp,
+                    lineHeight = 10.8.sp,
                     maxLines = 1
                 )
 
@@ -235,8 +235,8 @@ private fun Reference1ClassicLiveStamp(
                     text = timeConfig.formatTemplate1Timestamp(),
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 7.8.sp,
-                    lineHeight = 8.8.sp,
+                    fontSize = 9.0.sp,
+                    lineHeight = 10.8.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.clickable(onClick = onTimeClick)
@@ -253,8 +253,8 @@ private fun Reference1ClassicLiveStamp(
                         text = noteDisplay,
                         color = Color(0xFFF3F4F6),
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 7.8.sp,
-                        lineHeight = 8.8.sp,
+                        fontSize = 8.5.sp,
+                        lineHeight = 10.2.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

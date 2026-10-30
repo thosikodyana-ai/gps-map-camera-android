@@ -80,6 +80,9 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
     val miniMapBitmap: StateFlow<Bitmap?> = _miniMapBitmap.asStateFlow()
 
     private val _rawCaptureBitmap = MutableStateFlow<Bitmap?>(null)
+    private val _previewRotationDegrees = MutableStateFlow(0)
+    val previewRotationDegrees: StateFlow<Int> = _previewRotationDegrees.asStateFlow()
+
     private val _previewStampedBitmap = MutableStateFlow<Bitmap?>(null)
     val previewStampedBitmap: StateFlow<Bitmap?> = _previewStampedBitmap.asStateFlow()
 
@@ -517,11 +520,12 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
         reRenderActivePreviewIfNeeded()
     }
 
-    // --- Capture, Gallery Import & Preview Baking ---
+    // --- Capture, Gallery Import, Manual Rotation & Preview Baking ---
     fun onRawPhotoCaptured(rawBitmap: Bitmap) {
         if (!_timeConfig.value.isManualOverride) {
             _timeConfig.update { it.copy(currentAutoMillis = System.currentTimeMillis()) }
         }
+        _previewRotationDegrees.value = 0
         viewModelScope.launch {
             _isRenderingPreview.value = true
             val prepared = withContext(Dispatchers.Default) {
@@ -543,6 +547,7 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
         if (!_timeConfig.value.isManualOverride) {
             _timeConfig.update { it.copy(currentAutoMillis = System.currentTimeMillis()) }
         }
+        _previewRotationDegrees.value = 0
         viewModelScope.launch {
             _isRenderingPreview.value = true
             val sampleBmp = withContext(Dispatchers.Default) {
@@ -554,6 +559,7 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun onGalleryImagePicked(uri: Uri) {
+        _previewRotationDegrees.value = 0
         viewModelScope.launch {
             _isRenderingPreview.value = true
             val (decodedBmp, exifLatLon) = MediaStoreExifSaver.decodeBitmapFromUri(getApplication(), uri)
@@ -579,6 +585,16 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    /**
+     * Rotates the preview photo 90° clockwise each time: 0° -> 90° -> 180° -> 270° -> 0°.
+     * Rotation is applied to the raw photo FIRST, then the upright stamp is baked onto the rotated photo.
+     */
+    fun rotatePreviewClockwise() {
+        val nextRotation = (_previewRotationDegrees.value + 90) % 360
+        _previewRotationDegrees.value = nextRotation
+        reRenderActivePreviewIfNeeded()
+    }
+
     private fun reRenderActivePreviewIfNeeded() {
         val raw = _rawCaptureBitmap.value ?: return
         bakePreviewBitmap(raw)
@@ -596,13 +612,15 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
                 streetHint = _locationState.value.street
             ).also { _miniMapBitmap.value = it }
 
+            val currentRotation = _previewRotationDegrees.value
             val stamped = withContext(Dispatchers.Default) {
                 BitmapStampRenderer.renderStampedBitmap(
                     sourceBitmap = rawBitmap,
                     timeConfig = _timeConfig.value,
                     location = _locationState.value,
                     styleConfig = _styleConfig.value,
-                    miniMapBitmap = currentMap
+                    miniMapBitmap = currentMap,
+                    rotationDegrees = currentRotation
                 )
             }
             _previewStampedBitmap.value = stamped
@@ -613,6 +631,7 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
     fun discardPreview() {
         _rawCaptureBitmap.value = null
         _previewStampedBitmap.value = null
+        _previewRotationDegrees.value = 0
     }
 
     fun saveCurrentPreviewToGallery(onSavedSuccess: () -> Unit = {}) {

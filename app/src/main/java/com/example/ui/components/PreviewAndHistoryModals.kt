@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +21,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -84,12 +88,14 @@ import java.io.File
 @Composable
 fun StampedPreviewModal(
     stampedBitmap: Bitmap,
+    rotationDegrees: Int = 0,
     isRendering: Boolean,
     isSaving: Boolean,
     timeConfig: TimeConfig,
     location: LocationMetadata,
     onRetakeOrDiscard: () -> Unit,
     onSaveToGallery: () -> Unit,
+    onRotatePhoto90: () -> Unit = {},
     onOpenTimeEdit: () -> Unit,
     onOpenLocationEdit: () -> Unit,
     onOpenStyleEdit: () -> Unit
@@ -115,14 +121,14 @@ fun StampedPreviewModal(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Pratinjau Hasil Stamp & EXIF",
                         style = MaterialTheme.typography.titleLarge,
                         color = Color.White
                     )
                     Text(
-                        text = "Anda masih dapat mengedit jam, lokasi peta, atau template",
+                        text = "Anda masih dapat memutar foto, mengedit jam, lokasi peta, atau template",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary
                     )
@@ -139,8 +145,33 @@ fun StampedPreviewModal(
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
             ) {
+                AssistChip(
+                    onClick = onRotatePhoto90,
+                    label = {
+                        Text(
+                            text = if (rotationDegrees == 0) "Putar 90°" else "Putar 90° ($rotationDegrees°)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.RotateRight,
+                            contentDescription = "Putar Foto 90 Derajat",
+                            tint = SignalAmber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (rotationDegrees != 0) SignalAmber.copy(alpha = 0.18f) else TacticalSurface,
+                        labelColor = Color.White
+                    ),
+                    modifier = Modifier.testTag("preview_rotate_90_chip")
+                )
                 AssistChip(
                     onClick = onOpenTimeEdit,
                     label = { Text("Edit Waktu", fontSize = 12.sp) },
@@ -199,6 +230,8 @@ fun StampedPreviewModal(
             val cachedPreviewImage = remember(stampedBitmap) {
                 stampedBitmap.asImageBitmap()
             }
+            val isLandscapePhoto = stampedBitmap.width > stampedBitmap.height
+
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -216,6 +249,39 @@ fun StampedPreviewModal(
                         .fillMaxSize()
                         .padding(6.dp)
                 )
+
+                // Top-Right Quick Action Overlay Button for "Putar 90°"
+                Surface(
+                    color = ObsidianBackground.copy(alpha = 0.82f),
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(12.dp)
+                        .border(1.dp, SignalAmber.copy(alpha = 0.85f), RoundedCornerShape(50))
+                        .clip(RoundedCornerShape(50))
+                        .clickable(enabled = !isRendering && !isSaving, onClick = onRotatePhoto90)
+                        .testTag("preview_overlay_rotate_button")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                            contentDescription = "Putar 90 Derajat",
+                            tint = SignalAmber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Putar 90° • ${if (isLandscapePhoto) "Landscape" else "Portrait"} (${rotationDegrees}°)",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.5.sp,
+                            color = Color.White
+                        )
+                    }
+                }
 
                 if (isRendering) {
                     Surface(
