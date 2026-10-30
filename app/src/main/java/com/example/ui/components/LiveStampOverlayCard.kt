@@ -1,10 +1,8 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
@@ -29,15 +27,14 @@ import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -50,13 +47,9 @@ import com.example.model.LocationMetadata
 import com.example.model.StampStyleConfig
 import com.example.model.StampTemplate
 import com.example.model.TimeConfig
-import com.example.ui.theme.CompassCyan
 import com.example.ui.theme.GpsEmerald
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.SignalAmber
-import java.util.Locale
-import kotlin.math.cos
-import kotlin.math.sin
 
 @Composable
 fun LiveStampOverlayCard(
@@ -68,12 +61,16 @@ fun LiveStampOverlayCard(
     onLocationClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val cachedImageBitmap = remember(miniMapBitmap) {
+        miniMapBitmap?.asImageBitmap()
+    }
+
     when (styleConfig.template) {
         StampTemplate.CLASSIC -> Reference1ClassicLiveStamp(
             timeConfig = timeConfig,
             location = location,
             styleConfig = styleConfig,
-            miniMapBitmap = miniMapBitmap,
+            miniMapImageBitmap = cachedImageBitmap,
             onTimeClick = onTimeClick,
             onLocationClick = onLocationClick,
             modifier = modifier
@@ -82,7 +79,7 @@ fun LiveStampOverlayCard(
             timeConfig = timeConfig,
             location = location,
             styleConfig = styleConfig,
-            miniMapBitmap = miniMapBitmap,
+            miniMapImageBitmap = cachedImageBitmap,
             onTimeClick = onTimeClick,
             onLocationClick = onLocationClick,
             modifier = modifier
@@ -91,7 +88,7 @@ fun LiveStampOverlayCard(
             timeConfig = timeConfig,
             location = location,
             styleConfig = styleConfig,
-            miniMapBitmap = miniMapBitmap,
+            miniMapImageBitmap = cachedImageBitmap,
             onTimeClick = onTimeClick,
             onLocationClick = onLocationClick,
             modifier = modifier
@@ -100,22 +97,17 @@ fun LiveStampOverlayCard(
 }
 
 /**
- * 100% Reference Image 1 (Brebes Satellite Style) Live Viewfinder Overlay:
- * - Left separate rounded card: Satellite Mini-Map with red pin & white "Google" text
+ * 100% Reference Image 1 (Green-Circled Brebes Satellite Style) Live Viewfinder Overlay:
+ * - Left separate rounded card: 1:1 Square Satellite Mini-Map with Center-Crop (never squished)
  * - Top-right attached badge tab: "[📷] GPS Map Camera"
- * - Right separate dark translucent card:
- *   - Headline + Indonesian Flag 🇮🇩
- *   - Plus Code + Full Address
- *   - Lat ...° Long ...°
- *   - Jumat, 30/10/2026 01:47 PM GMT +07:00
- *   - Note : Captured by GPS Map Camera
+ * - Right separate dark translucent card: Full-space proportional typography matching Green Circle reference
  */
 @Composable
 private fun Reference1ClassicLiveStamp(
     timeConfig: TimeConfig,
     location: LocationMetadata,
     styleConfig: StampStyleConfig,
-    miniMapBitmap: Bitmap?,
+    miniMapImageBitmap: ImageBitmap?,
     onTimeClick: () -> Unit,
     onLocationClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -159,38 +151,39 @@ private fun Reference1ClassicLiveStamp(
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 9.sp
+                    fontSize = 9.5.sp
                 )
             }
         }
 
-        // Main Split Row: Left Satellite Mini-Map Card + Right Info Card
+        // Main Split Row: Left 1:1 Square Satellite Mini-Map Card + Right Info Card
         Row(
             verticalAlignment = Alignment.Bottom,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
         ) {
-            if (styleConfig.showMiniMap && miniMapBitmap != null) {
+            if (styleConfig.showMiniMap && miniMapImageBitmap != null) {
                 Box(
                     modifier = Modifier
-                        .width(96.dp)
                         .fillMaxHeight()
+                        .aspectRatio(1f, matchHeightConstraintsFirst = true)
                         .clip(cardShape)
                         .clickable(onClick = onLocationClick)
                 ) {
                     Image(
-                        bitmap = miniMapBitmap.asImageBitmap(),
+                        bitmap = miniMapImageBitmap,
                         contentDescription = "Mini Map Satelit",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
-                Spacer(modifier = Modifier.width(7.dp))
+                Spacer(modifier = Modifier.width(6.dp))
             }
 
             // Right Dark Translucent Card
             Column(
+                verticalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
@@ -206,8 +199,8 @@ private fun Reference1ClassicLiveStamp(
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Normal,
-                    fontSize = 13.5.sp,
-                    lineHeight = 16.sp,
+                    fontSize = 14.5.sp,
+                    lineHeight = 16.5.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -219,8 +212,8 @@ private fun Reference1ClassicLiveStamp(
                     text = location.template1FullAddressWithPlusCode,
                     color = Color(0xFFF3F4F6),
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 9.5.sp,
-                    lineHeight = 11.5.sp,
+                    fontSize = 10.2.sp,
+                    lineHeight = 12.2.sp,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -232,8 +225,8 @@ private fun Reference1ClassicLiveStamp(
                     text = location.template1LatLongText,
                     color = Color(0xFFF3F4F6),
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 9.5.sp,
-                    lineHeight = 11.5.sp,
+                    fontSize = 10.2.sp,
+                    lineHeight = 12.2.sp,
                     maxLines = 1
                 )
 
@@ -242,8 +235,8 @@ private fun Reference1ClassicLiveStamp(
                     text = timeConfig.formatTemplate1Timestamp(),
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 9.5.sp,
-                    lineHeight = 11.5.sp,
+                    fontSize = 10.2.sp,
+                    lineHeight = 12.2.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.clickable(onClick = onTimeClick)
@@ -260,8 +253,8 @@ private fun Reference1ClassicLiveStamp(
                         text = noteDisplay,
                         color = Color(0xFFF3F4F6),
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 9.5.sp,
-                        lineHeight = 11.5.sp,
+                        fontSize = 10.2.sp,
+                        lineHeight = 12.2.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -273,26 +266,21 @@ private fun Reference1ClassicLiveStamp(
 
 /**
  * 100% Reference Image 2 (Street Map + Telemetry Sensor Icons Style) Live Viewfinder Overlay:
- * - Left separate rounded card: Light Street Map with large red pin & multicolored "Google" logo
- * - Right separate dark translucent card:
- *   - 2-line Address Header
- *   - ⌖ 55,7399°, 37,6016°
- *   - 🕒 Jum, Okt 30, 2026, 13:53, GMT +7:00
- *   - ▲ 44m di atas permukaan laut
- *   - ⌖ ±2m akurasi    ((•)) 45,72 µT    🧭 12 N
+ * - Left separate rounded card: 1:1 Square Light Street Map with Center-Crop (never squished)
+ * - Right separate dark translucent card: Full-space proportional telemetry rows & 3 sensor columns
  */
 @Composable
 private fun Reference2TelemetryLiveStamp(
     timeConfig: TimeConfig,
     location: LocationMetadata,
     styleConfig: StampStyleConfig,
-    miniMapBitmap: Bitmap?,
+    miniMapImageBitmap: ImageBitmap?,
     onTimeClick: () -> Unit,
     onLocationClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val cardBgColor = Color(0xFF1C1E22).copy(alpha = styleConfig.backgroundOpacity.coerceIn(0.40f, 0.95f))
-    val cardShape = RoundedCornerShape(12.dp)
+    val cardShape = RoundedCornerShape(10.dp)
 
     Row(
         verticalAlignment = Alignment.Bottom,
@@ -301,22 +289,22 @@ private fun Reference2TelemetryLiveStamp(
             .height(IntrinsicSize.Min)
             .testTag("live_stamp_overlay_card")
     ) {
-        if (styleConfig.showMiniMap && miniMapBitmap != null) {
+        if (styleConfig.showMiniMap && miniMapImageBitmap != null) {
             Box(
                 modifier = Modifier
-                    .width(92.dp)
                     .fillMaxHeight()
+                    .aspectRatio(1f, matchHeightConstraintsFirst = true)
                     .clip(cardShape)
                     .clickable(onClick = onLocationClick)
             ) {
                 Image(
-                    bitmap = miniMapBitmap.asImageBitmap(),
+                    bitmap = miniMapImageBitmap,
                     contentDescription = "Mini Map Jalan",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
         }
 
         Column(
@@ -327,7 +315,7 @@ private fun Reference2TelemetryLiveStamp(
                 .clip(cardShape)
                 .background(cardBgColor)
                 .clickable(onClick = onLocationClick)
-                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .padding(horizontal = 10.dp, vertical = 7.dp)
         ) {
             // 2-line Address Header
             Text(
@@ -335,13 +323,13 @@ private fun Reference2TelemetryLiveStamp(
                 color = Color.White,
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.Normal,
-                fontSize = 12.5.sp,
-                lineHeight = 15.sp,
+                fontSize = 13.sp,
+                lineHeight = 15.2.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
             // Row 1: Crosshair + Comma Coordinates
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -356,7 +344,7 @@ private fun Reference2TelemetryLiveStamp(
                     text = location.template2CommaCoordText,
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.sp
+                    fontSize = 10.5.sp
                 )
             }
 
@@ -378,7 +366,7 @@ private fun Reference2TelemetryLiveStamp(
                     text = timeConfig.formatTemplate2Timestamp(),
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.sp,
+                    fontSize = 10.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -399,7 +387,7 @@ private fun Reference2TelemetryLiveStamp(
                     text = location.template2AltitudeText,
                     color = Color.White,
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.sp
+                    fontSize = 10.5.sp
                 )
             }
 
@@ -416,14 +404,14 @@ private fun Reference2TelemetryLiveStamp(
                         imageVector = Icons.Default.GpsFixed,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(11.dp)
+                        modifier = Modifier.size(11.5.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = location.template2AccuracyText,
                         color = Color.White,
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 9.5.sp
+                        fontSize = 10.sp
                     )
                 }
 
@@ -432,14 +420,14 @@ private fun Reference2TelemetryLiveStamp(
                         imageVector = Icons.Default.Sensors,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(11.dp)
+                        modifier = Modifier.size(11.5.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = location.template2MagneticText,
                         color = Color.White,
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 9.5.sp
+                        fontSize = 10.sp
                     )
                 }
 
@@ -448,14 +436,14 @@ private fun Reference2TelemetryLiveStamp(
                         imageVector = Icons.Default.Explore,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(11.dp)
+                        modifier = Modifier.size(11.5.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = location.template2CompassText,
                         color = Color.White,
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 9.5.sp
+                        fontSize = 10.sp
                     )
                 }
             }
@@ -468,7 +456,7 @@ private fun MinimalistLiveStamp(
     timeConfig: TimeConfig,
     location: LocationMetadata,
     styleConfig: StampStyleConfig,
-    miniMapBitmap: Bitmap?,
+    miniMapImageBitmap: ImageBitmap?,
     onTimeClick: () -> Unit,
     onLocationClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -484,7 +472,7 @@ private fun MinimalistLiveStamp(
             .padding(horizontal = 10.dp, vertical = 8.dp)
             .testTag("live_stamp_overlay_card")
     ) {
-        if (styleConfig.showMiniMap && miniMapBitmap != null) {
+        if (styleConfig.showMiniMap && miniMapImageBitmap != null) {
             Box(
                 modifier = Modifier
                     .size(54.dp)
@@ -492,7 +480,7 @@ private fun MinimalistLiveStamp(
                     .clickable(onClick = onLocationClick)
             ) {
                 Image(
-                    bitmap = miniMapBitmap.asImageBitmap(),
+                    bitmap = miniMapImageBitmap,
                     contentDescription = "Mini Map Lokasi GPS",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()

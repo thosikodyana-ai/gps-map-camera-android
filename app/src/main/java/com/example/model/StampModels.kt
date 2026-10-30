@@ -42,7 +42,7 @@ data class TimeConfig(
         get() = if (isManualOverride) customEpochMillis else currentAutoMillis
 
     fun formatDisplayTimestamp(): String {
-        val locale = Locale("id", "ID")
+        val locale = Locale.forLanguageTag("id-ID")
         val sdf = SimpleDateFormat(formatOption.pattern, locale).apply {
             timeZone = TimeZone.getTimeZone(timeZoneOption.zoneId)
         }
@@ -54,7 +54,7 @@ data class TimeConfig(
      * while respecting custom format if the user explicitly switched to 24H/ISO.
      */
     fun formatTemplate1Timestamp(): String {
-        val locale = Locale("id", "ID")
+        val locale = Locale.forLanguageTag("id-ID")
         val pattern = when (formatOption) {
             DateFormatOption.REF_TEMPLATE_1 -> "EEEE, dd/MM/yyyy hh:mm a"
             DateFormatOption.REF_TEMPLATE_2 -> "EEEE, dd/MM/yyyy HH:mm"
@@ -70,7 +70,7 @@ data class TimeConfig(
      * Matches Reference Image 2: "Jum, Okt 30, 2026, 13:53, GMT +7:00"
      */
     fun formatTemplate2Timestamp(): String {
-        val locale = Locale("id", "ID")
+        val locale = Locale.forLanguageTag("id-ID")
         val pattern = when (formatOption) {
             DateFormatOption.REF_TEMPLATE_1,
             DateFormatOption.REF_TEMPLATE_2 -> "EEE, MMM dd, yyyy, HH:mm"
@@ -101,12 +101,22 @@ object LocationSource {
  */
 object PlusCodeGenerator {
     private const val CODE_ALPHABET = "23456789CFGHJMPQRVWX"
+    private val PLUS_CODE_REGEX = Regex("^[23456789CFGHJMPQRVWXcfghjmpqrvwx]{4,8}\\+[23456789CFGHJMPQRVWXcfghjmpqrvwx]{2,4}$")
+
+    fun isPlusCodeToken(token: String): Boolean {
+        return PLUS_CODE_REGEX.matches(token.trim())
+    }
+
+    fun stripLeadingPlusCodes(address: String): String {
+        val parts = address.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val filtered = parts.dropWhile { isPlusCodeToken(it) }
+        return if (filtered.isNotEmpty()) filtered.joinToString(", ") else address.trim()
+    }
 
     fun generateShortPlusCode(latitude: Double, longitude: Double): String {
         val clampedLat = (latitude.coerceIn(-89.999999, 89.999999) + 90.0)
         val clampedLon = ((longitude + 180.0) % 360.0 + 360.0) % 360.0
 
-        // Standard Open Location Code 10-digit calculation
         var latVal = floor(clampedLat * 8000.0).toLong()
         var lonVal = floor(clampedLon * 8000.0).toLong()
 
@@ -119,7 +129,6 @@ object PlusCodeGenerator {
             lonVal /= 20
             latVal /= 20
         }
-        // Return the local 4+3 short code (e.g. "427p+2cv") in lowercase to match Reference Image 1
         val prefix4 = String(chars, 4, 4).lowercase(Locale.US)
         val suffix2 = String(chars, 8, 2).lowercase(Locale.US)
         val extraChar = CODE_ALPHABET[((abs(latitude * 100000).toInt() + abs(longitude * 100000).toInt()) % 20)]
@@ -151,28 +160,29 @@ data class LocationMetadata(
     val customFullAddressOverride: String = ""
 ) {
     /**
-     * Header for Reference Template 1 (Image 1):
+     * Header for Reference Template 1 (Image 1 / Green Circle):
      * "Kecamatan Brebes, Jawa Tengah, Indonesia"
      */
     val template1Headline: String
         get() = listOf(
-            locality.ifBlank { city },
+            locality.ifBlank { city.ifBlank { subLocality } },
             province,
             country
-        ).map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
+        ).map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", ")
 
     /**
-     * Body address for Reference Template 1 (Image 1):
+     * Body address for Reference Template 1 (Image 1 / Green Circle):
      * "427p+2cv, Jl. Sapphire Regency, Pulosari, Kec. Brebes, Kabupaten Brebes, Jawa Tengah 52213, Indonesia"
+     * Guarantees no duplicate Plus Code at the start of the address.
      */
     val template1FullAddressWithPlusCode: String
         get() {
             val codePrefix = plusCode.trim()
-            val baseAddr = fullAddress
-            return if (codePrefix.isNotEmpty() && !baseAddr.startsWith(codePrefix, ignoreCase = true)) {
-                "$codePrefix, $baseAddr"
+            val cleanedBase = PlusCodeGenerator.stripLeadingPlusCodes(fullAddress)
+            return if (codePrefix.isNotEmpty() && !cleanedBase.startsWith(codePrefix, ignoreCase = true)) {
+                "$codePrefix, $cleanedBase"
             } else {
-                baseAddr
+                cleanedBase
             }
         }
 
@@ -182,32 +192,35 @@ data class LocationMetadata(
      */
     val template2AddressHeader: String
         get() = if (customFullAddressOverride.isNotBlank()) {
-            customFullAddressOverride
+             customFullAddressOverride
         } else {
+            val cleanedStreet = street.trim().takeUnless { PlusCodeGenerator.isPlusCodeToken(it) } ?: ""
+            val codeFallback = plusCode.trim().uppercase(Locale.US)
             listOf(
-                street,
+                cleanedStreet.ifBlank { codeFallback },
                 subLocality,
                 city.ifBlank { locality },
                 country,
                 postalCode
-            ).map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
+            ).map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", ")
         }
 
     val fullAddress: String
         get() = if (customFullAddressOverride.isNotBlank()) {
-            customFullAddressOverride
+            PlusCodeGenerator.stripLeadingPlusCodes(customFullAddressOverride)
         } else {
+            val cleanedStreet = street.trim().takeUnless { PlusCodeGenerator.isPlusCodeToken(it) } ?: ""
             val provWithPostal = listOf(province.trim(), postalCode.trim())
                 .filter { it.isNotEmpty() }
                 .joinToString(" ")
             listOf(
-                street,
+                cleanedStreet,
                 subLocality,
                 locality,
                 city,
                 provWithPostal,
                 country
-            ).map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
+            ).map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", ")
         }
 
     /**

@@ -2,12 +2,12 @@ package com.example.ui.components
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -20,35 +20,47 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -62,14 +74,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -81,6 +96,7 @@ import androidx.core.content.ContextCompat
 import com.example.model.LocationSource
 import com.example.model.PlusCodeGenerator
 import com.example.sensor.GeocodedAddressParts
+import com.example.sensor.PlaceSearchResult
 import com.example.stamp.MapTileFetcher
 import com.example.stamp.WebMercatorMath
 import com.example.ui.theme.BorderSubtle
@@ -117,10 +133,10 @@ private data class MapQuickRegion(
 
 private val quickMapRegions = listOf(
     MapQuickRegion("Brebes (Ref 1)", -6.887405, 109.035938, "Jl. Sapphire Regency, Pulosari, Kec. Brebes, Jawa Tengah 52213"),
+    MapQuickRegion("Slawi / Tegal", -6.978291, 109.140948, "Procot, Kecamatan Slawi, Kabupaten Tegal, Jawa Tengah 52411"),
     MapQuickRegion("Moskva (Ref 2)", 55.739900, 37.601600, "1-Y Zachat'yevskiy Pereulok, 15, Moskva, Rusia, 119034"),
     MapQuickRegion("Jakarta Monas", -6.175392, 106.827153, "Jl. Medan Merdeka Utara, Gambir, Jakarta Pusat"),
-    MapQuickRegion("Surabaya", -7.257472, 112.752088, "Jl. Tunjungan No. 65, Genteng, Kota Surabaya"),
-    MapQuickRegion("Bandung", -6.902481, 107.618810, "Jl. Diponegoro No. 22, Citarum, Kota Bandung")
+    MapQuickRegion("Surabaya", -7.257472, 112.752088, "Jl. Tunjungan No. 65, Genteng, Kota Surabaya")
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -131,11 +147,13 @@ fun InteractiveMapPickerDialog(
     initialAddress: String,
     mapTileFetcher: MapTileFetcher,
     onReverseGeocodeRequest: suspend (Double, Double) -> GeocodedAddressParts?,
+    onSearchPlacesRequest: suspend (String) -> List<PlaceSearchResult> = { emptyList() },
     onRequestMyGpsLocation: suspend () -> Pair<Double, Double>?,
     onDismissCancel: () -> Unit,
     onConfirmLocation: (PickedMapLocationResult) -> Unit
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
 
     // Draft Map Viewport Center & Zoom (only committed when user clicks "Pilih Lokasi / OK")
@@ -144,7 +162,7 @@ fun InteractiveMapPickerDialog(
     var zoomLevel by remember { mutableIntStateOf(16) }
     var isSatelliteLayer by remember { mutableStateOf(false) }
 
-    // Draft Selected Marker Point (can be placed by tapping anywhere on the map or dragging)
+    // Draft Selected Marker Point (can be placed by tapping anywhere on the map, dragging, or searching)
     var selectedLat by remember { mutableDoubleStateOf(initialLatitude.coerceIn(-85.0, 85.0)) }
     var selectedLon by remember { mutableDoubleStateOf(initialLongitude.coerceIn(-180.0, 180.0)) }
     var draftAddress by remember { mutableStateOf(initialAddress) }
@@ -152,19 +170,37 @@ fun InteractiveMapPickerDialog(
     var isGeocodingLoading by remember { mutableStateOf(false) }
     var lockMarkerToCenterOnPan by remember { mutableStateOf(true) }
 
+    // Place Search state
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<PlaceSearchResult>>(emptyList()) }
+    var isSearchingPlaces by remember { mutableStateOf(false) }
+    var showSearchResultsDropdown by remember { mutableStateOf(false) }
+    var searchJob by remember { mutableStateOf<Job?>(null) }
+
     var canvasSize by remember { mutableStateOf(IntSize(800, 800)) }
-    val loadedTiles = remember { mutableStateMapOf<String, Bitmap>() }
+    // Pre-converted ImageBitmap cache so Canvas onDraw runs at 60 FPS without bitmap wrapping
+    val loadedTiles = remember { mutableStateMapOf<String, ImageBitmap>() }
     var geocodeJob by remember { mutableStateOf<Job?>(null) }
 
-    val draftPlusCode = remember(selectedLat, selectedLon) {
-        PlusCodeGenerator.generateShortPlusCode(selectedLat, selectedLon)
+    val draftPlusCode by remember {
+        derivedStateOf {
+            PlusCodeGenerator.generateShortPlusCode(selectedLat, selectedLon)
+        }
+    }
+
+    // Derive integer tile indices so dragging inside the same 256px tile does NOT spawn coroutines on every pixel
+    val currentTileKey by remember {
+        derivedStateOf {
+            val (cx, cy) = WebMercatorMath.latLonToExactTile(viewportCenterLat, viewportCenterLon, zoomLevel)
+            Triple(floor(cx).toInt(), floor(cy).toInt(), zoomLevel)
+        }
     }
 
     fun triggerDraftReverseGeocode(lat: Double, lon: Double, fallbackHint: String = "") {
         geocodeJob?.cancel()
         geocodeJob = coroutineScope.launch {
             isGeocodingLoading = true
-            delay(280) // Debounce while user drags or taps rapidly
+            delay(320) // Debounce while user drags or taps rapidly
             val parts = onReverseGeocodeRequest(lat, lon)
             draftGeocodedParts = parts
             draftAddress = when {
@@ -185,32 +221,64 @@ fun InteractiveMapPickerDialog(
         }
     }
 
-    // Load visible 256x256 slippy map tiles whenever viewportCenterLat, viewportCenterLon, zoom, or layer changes
-    LaunchedEffect(viewportCenterLat, viewportCenterLon, zoomLevel, isSatelliteLayer) {
-        val (centerTileX, centerTileY) = WebMercatorMath.latLonToExactTile(
-            viewportCenterLat,
-            viewportCenterLon,
-            zoomLevel
-        )
-        val baseX = floor(centerTileX).toInt()
-        val baseY = floor(centerTileY).toInt()
+    fun executePlaceSearch(query: String, immediate: Boolean = false) {
+        searchJob?.cancel()
+        val cleaned = query.trim()
+        if (cleaned.length < 2) {
+            searchResults = emptyList()
+            showSearchResultsDropdown = false
+            isSearchingPlaces = false
+            return
+        }
+        searchJob = coroutineScope.launch {
+            isSearchingPlaces = true
+            if (!immediate) {
+                delay(350)
+            }
+            val found = onSearchPlacesRequest(cleaned)
+            searchResults = found
+            showSearchResultsDropdown = found.isNotEmpty()
+            isSearchingPlaces = false
+        }
+    }
+
+    fun selectPlaceFromSearchResult(item: PlaceSearchResult) {
+        focusManager.clearFocus()
+        showSearchResultsDropdown = false
+        viewportCenterLat = item.latitude.coerceIn(-85.0, 85.0)
+        viewportCenterLon = item.longitude.coerceIn(-180.0, 180.0)
+        selectedLat = viewportCenterLat
+        selectedLon = viewportCenterLon
+        if (zoomLevel < 16) zoomLevel = 16
+        if (item.addressParts != null) {
+            draftGeocodedParts = item.addressParts
+            draftAddress = item.subtitle.ifBlank { item.title }
+        } else {
+            draftAddress = item.subtitle.ifBlank { item.title }
+            triggerDraftReverseGeocode(viewportCenterLat, viewportCenterLon, draftAddress)
+        }
+    }
+
+    // Load visible 256x256 slippy map tiles ONLY when integer tile index, zoom, or layer changes
+    LaunchedEffect(currentTileKey, isSatelliteLayer) {
+        val (baseX, baseY, z) = currentTileKey
         val prefix = if (isSatelliteLayer) "sat" else "osm"
 
         for (dx in -1..1) {
             for (dy in -1..1) {
                 val tx = baseX + dx
                 val ty = baseY + dy
-                val key = "${prefix}_${zoomLevel}_${tx}_${ty}"
+                val key = "${prefix}_${z}_${tx}_${ty}"
                 if (!loadedTiles.containsKey(key)) {
                     launch {
                         val bmp = mapTileFetcher.fetchTileForInteractiveMap(
-                            zoom = zoomLevel,
+                            zoom = z,
                             tileX = tx,
                             tileY = ty,
                             isSatellite = isSatelliteLayer
                         )
-                        if (bmp != null) {
-                            loadedTiles[key] = bmp
+                        if (bmp != null && !bmp.isRecycled) {
+                            loadedTiles[key] = bmp.asImageBitmap()
                         }
                     }
                 }
@@ -260,16 +328,16 @@ fun InteractiveMapPickerDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(TacticalSurface)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.LocationOn,
                         contentDescription = null,
                         tint = SignalAmber,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
                             text = "Pilih Lokasi Manual di Peta",
@@ -277,10 +345,10 @@ fun InteractiveMapPickerDialog(
                             color = Color.White
                         )
                         Text(
-                            text = "Geser peta atau ketuk titik untuk menentukan lokasi",
+                            text = "Cari nama tempat/jalan, geser peta, atau ketuk titik lokasi",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary,
-                            fontSize = 11.5.sp
+                            fontSize = 11.sp
                         )
                     }
                 }
@@ -292,13 +360,167 @@ fun InteractiveMapPickerDialog(
                 }
             }
 
-            // 2. Quick Jump Bar (Helps user quickly jump between cities/regions before fine-tuning on map)
+            // 2. Search Place / Address Bar + Quick Jump Chips
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(TacticalSurfaceVariant)
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { newText ->
+                            searchQuery = newText
+                            executePlaceSearch(newText, immediate = false)
+                        },
+                        placeholder = {
+                            Text(
+                                text = "Cari tempat, jalan, kecamatan, kota...",
+                                fontSize = 12.5.sp,
+                                color = TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Cari Lokasi",
+                                tint = CompassCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (isSearchingPlaces) {
+                                CircularProgressIndicator(
+                                    color = SignalAmber,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            } else if (searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = {
+                                        searchQuery = ""
+                                        searchResults = emptyList()
+                                        showSearchResultsDropdown = false
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = "Hapus Pencarian",
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                focusManager.clearFocus()
+                                executePlaceSearch(searchQuery, immediate = true)
+                            }
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = ObsidianBackground,
+                            unfocusedContainerColor = ObsidianBackground,
+                            focusedBorderColor = CompassCyan,
+                            unfocusedBorderColor = BorderSubtle,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("map_search_input")
+                    )
+
+                    Button(
+                        onClick = {
+                            focusManager.clearFocus()
+                            executePlaceSearch(searchQuery, immediate = true)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = CompassCyan,
+                            contentColor = ObsidianBackground
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .height(52.dp)
+                            .testTag("map_search_submit_button")
+                    ) {
+                        Text(
+                            text = "Cari",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                // Dropdown list of matching places from Search
+                if (showSearchResultsDropdown && searchResults.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        color = ObsidianBackground,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, CompassCyan.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                            .testTag("map_search_results_list")
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 190.dp)
+                        ) {
+                            items(searchResults) { item ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { selectPlaceFromSearchResult(item) }
+                                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                                        .testTag("map_search_result_item")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Place,
+                                        contentDescription = null,
+                                        tint = SignalAmber,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = item.title,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 12.5.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = item.subtitle,
+                                            color = TextSecondary,
+                                            fontSize = 11.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -308,6 +530,7 @@ fun InteractiveMapPickerDialog(
                         FilterChip(
                             selected = false,
                             onClick = {
+                                showSearchResultsDropdown = false
                                 viewportCenterLat = region.lat
                                 viewportCenterLon = region.lon
                                 selectedLat = region.lat
@@ -326,7 +549,7 @@ fun InteractiveMapPickerDialog(
                 }
             }
 
-            // 3. Interactive Multi-Tile Map Canvas
+            // 3. Interactive Multi-Tile Map Canvas (60 FPS Pre-Cached ImageBitmap Rendering)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -338,6 +561,9 @@ fun InteractiveMapPickerDialog(
                     }
                     .pointerInput(zoomLevel, lockMarkerToCenterOnPan) {
                         detectDragGestures(
+                            onDragStart = {
+                                showSearchResultsDropdown = false
+                            },
                             onDragEnd = {
                                 if (lockMarkerToCenterOnPan) {
                                     triggerDraftReverseGeocode(selectedLat, selectedLon)
@@ -345,7 +571,7 @@ fun InteractiveMapPickerDialog(
                             }
                         ) { change, dragAmount ->
                             change.consume()
-                            val tileRenderPx = 512.0 // Crisp 2x density tile rendering
+                            val tileRenderPx = 512.0
                             val (curTileX, curTileY) = WebMercatorMath.latLonToExactTile(
                                 viewportCenterLat,
                                 viewportCenterLon,
@@ -368,6 +594,8 @@ fun InteractiveMapPickerDialog(
                     }
                     .pointerInput(zoomLevel, canvasSize) {
                         detectTapGestures { tapOffset ->
+                            showSearchResultsDropdown = false
+                            focusManager.clearFocus()
                             val tileRenderPx = 512.0
                             val centerX = canvasSize.width / 2.0
                             val centerY = canvasSize.height / 2.0
@@ -416,24 +644,24 @@ fun InteractiveMapPickerDialog(
                     val baseY = floor(centerTileY).toInt()
                     val prefix = if (isSatelliteLayer) "sat" else "osm"
 
-                    // Draw 3x3 surrounding slippy map tiles
-                    for (dx in -2..2) {
-                        for (dy in -2..2) {
+                    // Draw surrounding slippy map tiles using pre-cached ImageBitmap (zero allocation in onDraw)
+                    for (dx in -1..1) {
+                        for (dy in -1..1) {
                             val tx = baseX + dx
                             val ty = baseY + dy
                             val screenLeft = viewCenterX + ((tx - centerTileX) * tileRenderPx).toFloat()
                             val screenTop = viewCenterY + ((ty - centerTileY) * tileRenderPx).toFloat()
 
                             val key = "${prefix}_${zoomLevel}_${tx}_${ty}"
-                            val tileBmp = loadedTiles[key]
-                            if (tileBmp != null && !tileBmp.isRecycled) {
+                            val tileImg = loadedTiles[key]
+                            if (tileImg != null) {
                                 drawImage(
-                                    image = tileBmp.asImageBitmap(),
+                                    image = tileImg,
                                     dstOffset = IntOffset(screenLeft.roundToInt(), screenTop.roundToInt()),
                                     dstSize = IntSize(tileRenderPx.roundToInt() + 1, tileRenderPx.roundToInt() + 1)
                                 )
                             } else {
-                                // Offline fallback grid tile with subtle street contours
+                                // Offline fallback grid tile
                                 val gridColor = if (isSatelliteLayer) {
                                     Color(0xFF334E3C)
                                 } else {
@@ -445,7 +673,6 @@ fun InteractiveMapPickerDialog(
                                     size = androidx.compose.ui.geometry.Size(tileRenderPx, tileRenderPx),
                                     style = Stroke(width = 1.5f)
                                 )
-                                // Sub-grid lines
                                 val subStep = tileRenderPx / 4f
                                 for (s in 1..3) {
                                     drawLine(
@@ -477,18 +704,18 @@ fun InteractiveMapPickerDialog(
                     // Draw pulsing target circle & crosshair at selected point
                     drawCircle(
                         color = Color(0x44EA4335),
-                        radius = 34.dp.toPx(),
+                        radius = 32.dp.toPx(),
                         center = Offset(markerX, markerY)
                     )
                     drawCircle(
                         color = Color(0xFFEA4335),
-                        radius = 34.dp.toPx(),
+                        radius = 32.dp.toPx(),
                         center = Offset(markerX, markerY),
                         style = Stroke(width = 2.dp.toPx())
                     )
 
                     // Draw Teardrop Pin Marker with tip exactly at (markerX, markerY)
-                    val pinH = 44.dp.toPx()
+                    val pinH = 42.dp.toPx()
                     val pinR = pinH * 0.36f
                     val headCenterY = markerY - pinH * 0.64f
                     val pinPath = Path().apply {
@@ -522,23 +749,23 @@ fun InteractiveMapPickerDialog(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(12.dp)
+                        .padding(10.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.TouchApp,
                             contentDescription = null,
                             tint = SignalAmber,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Zoom $zoomLevel • Ketuk / Geser Peta",
                             fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
                             color = Color.White
                         )
                     }
@@ -551,7 +778,6 @@ fun InteractiveMapPickerDialog(
                         .align(Alignment.CenterEnd)
                         .padding(end = 12.dp)
                 ) {
-                    // Layer Toggle (OSM Street vs Satellite)
                     IconButton(
                         onClick = { isSatelliteLayer = !isSatelliteLayer },
                         modifier = Modifier
@@ -568,7 +794,6 @@ fun InteractiveMapPickerDialog(
                         )
                     }
 
-                    // Zoom In (+)
                     IconButton(
                         onClick = { zoomLevel = (zoomLevel + 1).coerceIn(4, 18) },
                         modifier = Modifier
@@ -585,7 +810,6 @@ fun InteractiveMapPickerDialog(
                         )
                     }
 
-                    // Zoom Out (-)
                     IconButton(
                         onClick = { zoomLevel = (zoomLevel - 1).coerceIn(4, 18) },
                         modifier = Modifier
@@ -602,7 +826,6 @@ fun InteractiveMapPickerDialog(
                         )
                     }
 
-                    // Optional "Lokasi Saya" GPS helper button
                     IconButton(
                         onClick = {
                             val hasFine = ContextCompat.checkSelfPermission(
@@ -655,7 +878,7 @@ fun InteractiveMapPickerDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(TacticalSurface)
-                    .padding(16.dp)
+                    .padding(14.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -678,18 +901,18 @@ fun InteractiveMapPickerDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
 
                 Text(
                     text = String.format(Locale.US, "Lat %.6f° • Long %.6f°", selectedLat, selectedLon),
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
+                    fontSize = 13.5.sp,
                     color = CompassCyan,
                     modifier = Modifier.testTag("map_selected_coordinates_text")
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (isGeocodingLoading) {
@@ -718,7 +941,7 @@ fun InteractiveMapPickerDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -729,7 +952,7 @@ fun InteractiveMapPickerDialog(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp)
+                            .height(48.dp)
                             .testTag("map_cancel_button")
                     ) {
                         Text(
@@ -761,7 +984,7 @@ fun InteractiveMapPickerDialog(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .weight(1.5f)
-                            .height(50.dp)
+                            .height(48.dp)
                             .testTag("map_confirm_ok_button")
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null)
@@ -769,7 +992,7 @@ fun InteractiveMapPickerDialog(
                         Text(
                             text = "Pilih Lokasi (OK)",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.5.sp
+                            fontSize = 14.sp
                         )
                     }
                 }

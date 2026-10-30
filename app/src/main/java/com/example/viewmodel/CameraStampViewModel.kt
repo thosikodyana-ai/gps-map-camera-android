@@ -23,6 +23,7 @@ import com.example.model.TimeConfig
 import com.example.model.TimeZoneOption
 import com.example.sensor.GeocodedAddressParts
 import com.example.sensor.LocationAndCompassEngine
+import com.example.sensor.PlaceSearchResult
 import com.example.stamp.BitmapStampRenderer
 import com.example.stamp.MapTileFetcher
 import com.example.storage.ExifInspectionReport
@@ -95,6 +96,7 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
     val selectedPhotoExif: StateFlow<ExifInspectionReport?> = _selectedPhotoExif.asStateFlow()
 
     private var locationCollectionJob: Job? = null
+    private var previewBakeJob: Job? = null
     private var lastMapLat: Double = Double.NaN
     private var lastMapLon: Double = Double.NaN
     private var lastMapSatellite: Boolean? = null
@@ -231,6 +233,10 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
 
     suspend fun reverseGeocodeCoordinates(latitude: Double, longitude: Double): GeocodedAddressParts? {
         return locationEngine.reverseGeocode(latitude, longitude)
+    }
+
+    suspend fun searchPlacesOnMap(query: String): List<PlaceSearchResult> {
+        return locationEngine.searchPlaces(query)
     }
 
     suspend fun requestOneShotMyGpsLocation(): Pair<Double, Double>? {
@@ -516,9 +522,15 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
         if (!_timeConfig.value.isManualOverride) {
             _timeConfig.update { it.copy(currentAutoMillis = System.currentTimeMillis()) }
         }
-        val cropped = cropToSelectedAspectRatio(rawBitmap, _aspectRatio.value)
-        _rawCaptureBitmap.value = cropped
-        bakePreviewBitmap(cropped)
+        viewModelScope.launch {
+            _isRenderingPreview.value = true
+            val prepared = withContext(Dispatchers.Default) {
+                val cropped = cropToSelectedAspectRatio(rawBitmap, _aspectRatio.value)
+                capBitmapDimension(cropped, maxEdgePx = 1600)
+            }
+            _rawCaptureBitmap.value = prepared
+            bakePreviewBitmap(prepared)
+        }
     }
 
     fun captureSampleFieldScene() {
@@ -573,7 +585,8 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun bakePreviewBitmap(rawBitmap: Bitmap) {
-        viewModelScope.launch {
+        previewBakeJob?.cancel()
+        previewBakeJob = viewModelScope.launch {
             _isRenderingPreview.value = true
             val isSatellite = _styleConfig.value.effectiveSatelliteMap
             val currentMap = _miniMapBitmap.value ?: mapTileFetcher.getMiniMapBitmap(
@@ -697,5 +710,14 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
             val yOffset = ((source.height - newHeight) / 2).coerceAtLeast(0)
             Bitmap.createBitmap(source, 0, yOffset, source.width, newHeight)
         }
+    }
+
+    private fun capBitmapDimension(source: Bitmap, maxEdgePx: Int): Bitmap {
+        val maxSide = maxOf(source.width, source.height)
+        if (maxSide <= maxEdgePx) return source
+        val scale = maxEdgePx.toFloat() / maxSide.toFloat()
+        val targetW = (source.width * scale).toInt().coerceAtLeast(320)
+        val targetH = (source.height * scale).toInt().coerceAtLeast(240)
+        return Bitmap.createScaledBitmap(source, targetW, targetH, true)
     }
 }

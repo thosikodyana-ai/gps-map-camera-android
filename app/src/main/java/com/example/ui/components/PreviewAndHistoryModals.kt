@@ -48,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -195,6 +196,9 @@ fun StampedPreviewModal(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            val cachedPreviewImage = remember(stampedBitmap) {
+                stampedBitmap.asImageBitmap()
+            }
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -205,7 +209,7 @@ fun StampedPreviewModal(
                     .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
             ) {
                 Image(
-                    bitmap = stampedBitmap.asImageBitmap(),
+                    bitmap = cachedPreviewImage,
                     contentDescription = "Hasil Foto dengan GPS Timestamp",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier

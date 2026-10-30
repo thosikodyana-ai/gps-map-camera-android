@@ -206,7 +206,7 @@ fun GpsMapCameraScreen(
     val previewView = remember {
         PreviewView(context).apply {
             scaleType = PreviewView.ScaleType.FILL_CENTER
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
         }
     }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
@@ -513,6 +513,7 @@ fun GpsMapCameraScreen(
             location = locationState,
             mapTileFetcher = viewModel.mapTileFetcher,
             onReverseGeocodeRequest = viewModel::reverseGeocodeCoordinates,
+            onSearchPlacesRequest = viewModel::searchPlacesOnMap,
             onRequestMyGpsLocation = viewModel::requestOneShotMyGpsLocation,
             onDismiss = { showLocationModal = false },
             onSaveLocation = viewModel::setManualLocationData,
@@ -527,6 +528,7 @@ fun GpsMapCameraScreen(
             initialAddress = locationState.fullAddress,
             mapTileFetcher = viewModel.mapTileFetcher,
             onReverseGeocodeRequest = viewModel::reverseGeocodeCoordinates,
+            onSearchPlacesRequest = viewModel::searchPlacesOnMap,
             onRequestMyGpsLocation = viewModel::requestOneShotMyGpsLocation,
             onDismissCancel = { showDirectMapPickerModal = false },
             onConfirmLocation = { picked ->

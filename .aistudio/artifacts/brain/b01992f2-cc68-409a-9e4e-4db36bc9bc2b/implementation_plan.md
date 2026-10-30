@@ -1,120 +1,146 @@
-# GPS Map Camera — Rencana Implementasi: 2 Template Presisi Referensi + Pemilihan Lokasi Manual via Peta Interaktif
+# GPS Map Camera — Perbaikan Proporsi Stamp (Lingkaran Hijau), Optimasi Performa UI Smooth 60 FPS & Fitur Pencarian Tempat di Peta
 
-Rencana ini menggabungkan dua pembaruan utama:
-1. **Penyamaan 100% Template Stamp dengan 2 Gambar Referensi** (*Template 1: Gaya Satelit Brebes* & *Template 2: Gaya Peta Jalan Terang + Sensor µT*).
-2. **Fitur Pemilihan Lokasi Manual Menggunakan Peta Interaktif (*Interactive Map Location Picker*)** yang terintegrasi penuh dengan formulir lokasi, *reverse geocoding* (Nominatim/Android Geocoder), perlindungan dari penimpaan otomatis GPS perangkat, dan penyimpanan persisten di database **Room** (termasuk atribut `location_source`).
+Pembaruan ini mencakup tiga peningkatan utama sesuai permintaan Anda:
+1. **Perbaikan Proporsi Stamp 100% Sesuai Contoh Lingkaran Hijau**: Kotak mini-map dikunci persegi `1:1` dengan *Center-Crop* anti-gepeng, serta ukuran huruf (font) pada kartu kanan diperbesar proporsional terhadap lebar kartu agar memenuhi ruang tanpa area kosong berlebih.
+2. **Optimasi Performa agar UI Sangat Ringan & Smooth (60 FPS)**: Menghilangkan *lag/stutter* pada layar kamera, pratinjau foto, dan saat menggeser peta interaktif.
+3. **Fitur Pencarian Lokasi/Tempat (`Search Bar`) pada Peta Manual**: Memungkinkan pengguna mengetik nama tempat, jalan, kelurahan, kecamatan, kota, atau koordinat langsung di halaman peta untuk langsung melompat ke titik lokasi yang dicari.
 
 ---
 
-### User Review & Critical Decisions
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> Rangkuman keputusan produk & aturan teknis yang diterapkan dalam rencana ini:
+> Ringkasan keputusan desain dan teknis yang akan diimplementasikan:
 
-- **Pemilihan Lokasi Manual via Peta Interaktif (*Interactive Map Picker*)**:
-  - Dapat diakses langsung dari formulir **Edit Lokasi** (baik dari layar kamera utama maupun dari *Preview Modal*).
-  - Mendukung interaksi penuh: **Geser peta (*pan/drag*)**, **Perbesar/Perkecil (*zoom in/out* via tombol `+`/`-` & *pinch gesture*)**, serta **Ketuk peta (*tap-to-select*) atau geser penanda (*marker*)** untuk memilih titik koordinat secara akurat.
-  - **Transaksional (`Pilih Lokasi / OK` vs `Batal`)**: Menggeser atau mengetuk peta hanya memperbarui *draft state* di dalam dialog peta. Koordinat dan alamat hasil *reverse geocoding* hanya diterapkan ke formulir ketika pengguna menekan tombol **"Pilih Lokasi (OK)"**. Jika pengguna menekan **"Batal"**, perubahan dibatalkan sepenuhnya.
-  - **Perlindungan dari Overwrite GPS & Berfungsi Tanpa Izin GPS**: Begitu pengguna memilih lokasi dari peta (`location_source = "manual_map"`), sistem mengunci lokasi tersebut agar **tidak pernah diganti otomatis oleh sensor GPS perangkat**. Tombol **"Lokasi Saya"** hanya tersedia sebagai alat bantu opsional pada peta, dan seluruh fitur peta interaktif tetap berjalan 100% walaupun izin GPS tidak diberikan.
-- **Dua Template Utama Presisi 100% Sesuai Gambar Referensi**:
-  - **Template 1 (Gambar 1 - Brebes Satellite)**: Kartu kiri *Mini-Map Satelit* dengan pin merah & teks `"Google"` putih; kartu kanan gelap *translucent* dengan tab kanan atas `[📷] GPS Map Camera`, judul Kecamatan/Provinsi/Negara + bendera 🇮🇩, *Plus Code* (`427p+2cv`) + alamat lengkap, `Lat ...° Long ...°`, hari/tanggal/jam `GMT +07:00`, dan `Note : ...`.
-  - **Template 2 (Gambar 2 - Street Map & Sensor µT)**: Kartu kiri *Mini-Map Peta Jalan Terang* dengan pin lokasi merah besar & logo `"Google"` warna-warni; kartu kanan gelap *translucent* dengan judul alamat 2 baris, baris `⌖` koordinat koma, baris `🕒` tanggal/jam `GMT +7:00`, baris elevasi `m di atas permukaan laut`, serta baris bawah 3 kolom sensor: `±m akurasi`, kekuatan medan magnet `µT` (*real-time magnetometer*), dan kompas `° N`.
-
----
-
-### 1. Overview & Core Concept
-
-- **What It Does**: Memberikan kendali penuh kepada pengguna atas informasi waktu dan lokasi pada foto dokumentasi. Pengguna dapat memilih titik lokasi secara presisi di atas peta interaktif (dengan *tile* peta *multi-zoom* yang dapat digeser dan diketuk), memeriksa koordinat serta alamat hasil *reverse geocoding*, menyimpannya ke formulir dan database lokal, serta mencetak *stamp* yang 100% identik dengan standar visual referensi.
+- **Keputusan 1 — Kotak Mini-Map Persegi 1:1 Anti-Gepeng & Font Memenuhi Kartu (Lingkaran Hijau)**:
+  - Lebar kartu mini-map kiri dikunci `1:1` mengikuti tinggi kartu kanan (`mapCardWidth = cardHeight`) dengan pemotongan *Center-Crop* agar peta, pin merah, dan tulisan `Google` tidak pernah gepeng baik pada foto Portrait maupun Landscape.
+  - Ukuran font judul lokasi, alamat + Plus Code (tanpa duplikasi kode), koordinat, jam, catatan, dan bar sensor dihitung dari lebar kartu kanan (`infoCardWidth`) sehingga memenuhi ruang kartu secara padat dan seimbang.
+- **Keputusan 2 — Optimasi UI Ringan & Smooth (Eliminasi Rekomposisi Berlebih)**:
+  - **Throttling Sensor Kompas & Magnetometer**: Membatasi pembaruan UI dari sensor maksimal setiap `400ms` (dan hanya saat nilai berubah signifikan) sehingga layar kamera tidak melakukan *re-render* 60 kali per detik.
+  - **Optimasi Drag Peta Interaktif**: Mengubah pemicu pengunduhan tile peta agar hanya berjalan ketika indeks kotak tile (`tileX`, `tileY`, `zoom`) berubah—bukan pada setiap piksel geseran jari—serta menyimpan `ImageBitmap` di memori agar kanvas peta bergerak sangat mulus 60 FPS.
+  - **Coalescing Render Pratinjau**: Membatalkan *job* render sebelumnya saat pengguna menggeser slider transparansi atau mengganti opsi dengan cepat, serta membatasi dimensi bitmap kerja agar proses *baking* stamp selesai instan (`< 25ms`).
+- **Keputusan 3 — Fitur Search Tempat & Alamat pada Peta Interaktif**:
+  - Menambahkan kolom pencarian (**"Cari nama jalan, tempat, desa, kota, atau koordinat..."**) di bagian atas modal Peta Interaktif.
+  - Mendukung pencarian hibrida menggunakan **Android Forward Geocoder** dan **OpenStreetMap Nominatim Search API** (serta deteksi input koordinat `lat, lon` langsung), menampilkan daftar hasil pencarian yang dapat diketuk untuk langsung memindahkan peta dan penanda lokasi ke tempat tersebut.
 
 ---
 
-### 2. User Experience & Visual Design
+## 1. Overview & Core Concept
 
-- **Alur Pemilihan Lokasi Manual Menggunakan Peta (`InteractiveMapPickerDialog`)**:
-  1. Pengguna membuka formulir **Edit Lokasi** lalu menekan tombol **"Pilih Lokasi lewat Peta Interaktif"**.
-  2. Tampil modal layar penuh **Peta Interaktif**:
-     - **Kanvas Peta Multi-Tile Interaktif**: Merender *slippy map tiles* (OpenStreetMap / Satelit dengan *fallback* grid koordinat saat *offline*) yang mendukung *drag/pan* mulus, *pinch-to-zoom*, tombol **Zoom In (`+`) / Zoom Out (`-`)**, serta **ketuk titik mana saja pada peta** untuk memindahkan *marker* pin merah.
-     - **Tombol Bantu "Lokasi Saya"**: Memusatkan tampilan peta ke titik GPS terakhir perangkat (jika izin GPS tersedia) tanpa langsung menyimpan sebelum dikonfirmasi.
-     - **Panel Info Titik Terpilih (Live Draft Preview)**: Menampilkan koordinat `Latitude` & `Longitude` dari posisi *marker* saat ini, *Plus Code* otomatis, serta status pengambilan alamat *reverse geocoding* (tetap valid dan bisa dikonfirmasi meskipun alamat tidak ditemukan atau perangkat sedang *offline*).
-     - **Tombol Aksi Bawah**:
-       - **"Batal"**: Menutup peta tanpa mengubah data lokasi pada formulir.
-       - **"Pilih Lokasi (OK)"**: Mengambil `latitude`, `longitude`, `address` (jika tersedia), menetapkan `location_source = "manual_map"`, menutup peta, dan mengisi formulir **Edit Lokasi**.
-  3. Saat pengguna menekan **"Simpan Lokasi"** pada formulir, konfigurasi lokasi disimpan ke database **Room** (`SavedLocationEntity` & `StampedPhotoEntity`) sehingga tetap tersimpan saat aplikasi atau data dibuka kembali.
+- **Masalah yang Diselesaikan**:
+  1. **Visual Stamp**: Kotak mini-map sebelumnya tertarik mengikuti rasio gambar dan ukuran font terlalu kecil pada foto Landscape/4:3.
+  2. **Performa UI**: Sensor magnetometer/akselerometer yang memancarkan data puluhan kali per detik dan pengunduhan tile peta pada setiap gerakan jari membuat *main thread* sibuk.
+  3. **Navigasi Peta Manual**: Menggeser peta secara manual ke kota atau jalan yang jauh membutuhkan waktu jika tidak ada fitur pencarian nama tempat.
+- **Nilai Utama Pembaruan**:
+  - Hasil foto ber-stamp tampil presisi seperti contoh referensi lingkaran hijau, aplikasi terasa ringan dan responsif di semua layar, dan pemilihan lokasi manual di peta menjadi jauh lebih cepat berkat kolom pencarian lokasi.
 
-- **Tata Letak Presisi Kedua Template Stamp**:
+---
+
+## 2. User Experience & Visual Design
+
+### A. Tata Letak Stamp Proporsional (Contoh Lingkaran Hijau)
+
 ```
-[TEMPLATE 1: GPS MAP CAMERA CLASSIC (GAMBAR 1)]
-                                                  ┌────────────────────┐
-┌─────────────────┐  ┌────────────────────────────┴────────────────────┤
-│                 │  │ Kecamatan Brebes, Jawa Tengah,                  │
-│   [SATELLITE]   │  │ Indonesia 🇮🇩                                    │
-│       📍        │  │ 427p+2cv, Jl. Sapphire Regency, Pulosari, ...   │
-│                 │  │ Lat -6.887405° Long 109.035938°                 │
-│     Google      │  │ Jumat, 30/10/2026 01:47 PM GMT +07:00           │
-│   (Putih/Bold)  │  │ Note : Captured by GPS Map Camera               │
-└─────────────────┘  └─────────────────────────────────────────────────┘
-
-[TEMPLATE 2: TELEMETRY STREET MAP (GAMBAR 2)]
-┌─────────────────┐  ┌─────────────────────────────────────────────────┐
-│  [STREET MAP]   │  │ 1-Y Zachat'yevskiy Pereulok, 15, Moskva,        │
-│                 │  │ Rusia, 119034                                   │
-│       📍        │  │ ⌖  55,7399°, 37,6016°                           │
-│    (Pin Besar)  │  │ 🕒 Jum, Okt 30, 2026, 13:53, GMT +7:00          │
-│                 │  │ ▲  44m di atas permukaan laut                   │
-│  Google (Warna) │  │ ⌖ ±2m akurasi    ((•)) 45,72 µT     🧭 12 N     │
-└─────────────────┘  └─────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│                  TATA LETAK PROPORSIONAL (LINGKARAN HIJAU)                 │
+│                                                           ┌──────────────┐ │
+│                                                           │📷 GPS Map Cam│ │
+│  ┌────────────────────┐  ┌────────────────────────────────┴──────────────┤ │
+│  │                    │  │ Kecamatan Slawi, Jawa Tengah,                 │ │
+│  │                    │  │ Indonesia 🇮🇩                                  │ │
+│  │        (📍)        │  │ 24cr+m95, Procot, Kec. Slawi, Kabupaten       │ │
+│  │                    │  │ Tegal, Jawa Tengah 52411, Indonesia           │ │
+│  │                    │  │ Lat -6.978291° Long 109.140948°               │ │
+│  │      Google        │  │ Jumat, 30/10/2026 10:18 PM GMT +07:00         │ │
+│  │                    │  │ Note : Captured by GPS Map Camera             │ │
+│  └────────────────────┘  └───────────────────────────────────────────────┘ │
+│   ▲ Persegi 1:1 Presisi   ▲ Font diskalakan dari lebar kartu kanan         │
+│     (Center-Crop,           sehingga teks memenuhi ruang horizontal &      │
+│      Pin & Google tidak     vertikal tanpa area kosong berlebih            │
+│      pernah gepeng)                                                        │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
+### B. Alur Pencarian Lokasi pada Peta Interaktif (`Interactive Map Search`)
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│  📍 Pilih Lokasi Manual di Peta                                       [✕]  │
+├────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────────────────────────────────────────┬────────┐ │
+│  │ 🔍 Cari tempat, jalan, kecamatan, kota, atau -6.88, 109.03  │ [Cari] │ │
+│  └──────────────────────────────────────────────────────────────┴────────┘ │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │ 📌 Procot, Kecamatan Slawi, Kabupaten Tegal, Jawa Tengah              │ │
+│  │ 📌 Jl. Sapphire Regency, Pulosari, Kec. Brebes, Jawa Tengah           │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│  [Brebes (Ref 1)]  [Moskva (Ref 2)]  [Jakarta Monas]  [Surabaya]           │
+├────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────┐                                       ( layers )
+│  │ Zoom 16 • Ketuk / Geser  │                                       (  +  ) │
+│  └──────────────────────────┘                                       (  -  ) │
+│                                   (📍)                              ( 🎯 ) │
+│                            [ Peta Interaktif ]                             │
+├────────────────────────────────────────────────────────────────────────────┤
+│  TITIK LOKASI YANG DIPILIH                             Plus Code: 24cr+m95 │
+│  Lat -6.978291° • Long 109.140948°                                         │
+│  Procot, Kecamatan Slawi, Kabupaten Tegal, Jawa Tengah 52411, Indonesia    │
+│  ┌──────────────────────────┐   ┌────────────────────────────────────────┐ │
+│  │          Batal           │   │        ✓ Pilih Lokasi (OK)             │ │
+│  └──────────────────────────┘   └────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
 ---
 
-### 3. Key Product Decisions & Trade-Offs
+## 3. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Peta Interaktif Berbasis Compose Multi-Tile Canvas (Zero API Key & Works Offline)**
-  - *Chosen Approach*: Membangun komponen `InteractiveMapLocationPicker` menggunakan kanvas interaktif Jetpack Compose (`pointerInput` untuk *pan/drag*, *pinch-to-zoom*, dan *tap gesture* untuk memilih titik) yang memuat *tile* peta OpenStreetMap / Esri Satellite secara asinkron sesuai *viewport* dan *zoom level* (`zoom 4..18`), dilengkapi *grid* koordinat *fallback* saat *offline*.
-  - *Why*: Tidak memerlukan Google Maps API Key yang berisiko gagal otorisasi, mendukung ketuk peta maupun geser peta dengan presisi matematis Web Mercator (`lat/lon <-> pixel/tile`), dan tetap bekerja tanpa izin GPS maupun tanpa koneksi internet.
-
-- **Decision 2: Reverse Geocoding Hibrida (Android Geocoder + Nominatim Fallback) & Toleransi Offline**
-  - *Chosen Approach*: Saat pengguna memilih titik pada peta interaktif, sistem memanggil Android `Geocoder` (dan *fallback* HTTP Nominatim OSM jika tersedia) di *background* untuk mengisi nama jalan, kelurahan, kecamatan, kota, provinsi, dan kode pos. Jika tidak ditemukan atau sedang *offline*, pengguna tetap dapat menekan **"Pilih Lokasi (OK)"** dengan koordinat yang dipilih sebagai referensi utama.
-
-- **Decision 3: Penyimpanan Persisten Konfigurasi Lokasi & Riwayat di Room Database**
-  - *Chosen Approach*: Menyimpan lokasi aktif pilihan pengguna beserta `location_source` (`"manual_map"`, `"manual_input"`, atau `"gps"`) ke dalam tabel Room (`SavedLocationProfileEntity`) serta menyertakannya pada setiap record foto (`StampedPhotoEntity`). Saat aplikasi dibuka kembali atau pengguna mengedit lokasi lagi, titik dan alamat yang sebelumnya disimpan langsung dimuat kembali tanpa tertimpa GPS.
+- **Keputusan 1: Pencarian Lokasi Hibrida (Android Geocoder + Nominatim + Koordinat Langsung)**
+  - *Pendekatan Terpilih*: Mendukung pencarian teks bebas melalui `Geocoder` bawaan Android dan API pencarian OpenStreetMap Nominatim (`nominatim.openstreetmap.org/search`) dengan detail alamat Bahasa Indonesia, ditambah parser koordinat langsung apabila pengguna mengetik angka `lat, lon`.
+  - *Alasan*: Memastikan pencarian jalan/desa/tempat selalu berhasil di semua perangkat Android bahkan tanpa Google Play Services penuh.
+- **Keputusan 2: Optimasi Rekomposisi Layar Kamera & Kanvas Peta**
+  - *Pendekatan Terpilih*: Menggunakan `distinctUntilChanged` + *time throttling* `400ms` pada aliran sensor kompas/magnetometer, memisahkan state detak jam agar hanya memperbarui teks jam, serta meng-cache `ImageBitmap` tile peta berdasarkan indeks `tileX/tileY` bulat.
+  - *Alasan*: Menurunkan beban CPU/GPU secara drastis sehingga animasi buka/tutup dialog, geseran peta, dan *viewfinder* kamera berjalan sangat mulus.
 
 ---
 
-### 4. Technical Architecture & Data Strategy *(Technical Reference)*
+## 4. Technical Architecture & Data Strategy *(Technical Reference)*
 
-- **Architecture & Data Flow Diagram**:
+### Diagram Arsitektur Optimasi UI & Pencarian Peta
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    LocationEditModalSheet (Formulir)                    │
-│  • Menampilkan koordinat, alamat, Plus Code, Note & badge sumber lokasi │
-│  • Tombol: "Pilih Titik di Peta Interaktif"                             │
-└───────────────────┬───────────────────────────────────▲─────────────────┘
-                    │ Buka Peta                         │ Kembalikan
-                    ▼                                   │ (Jika Klik "OK")
-┌───────────────────────────────────────────────────────┴─────────────────┐
-│              InteractiveMapPickerDialog (Peta Interaktif)               │
-│  • Draft State: draftLat, draftLon, draftZoom, draftAddress             │
-│  • Gestur: Pan/Drag Peta, Zoom (+/- & Pinch), Tap Peta / Geser Marker   │
-│  • Tombol "Lokasi Saya" (Opsional) | "Batal" (Discard) | "Pilih Lokasi" │
-└───────────────────────────────────────────────────────┬─────────────────┘
-                                                        │ Simpan Formulir
-                                                        ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│             CameraStampViewModel & Room Database Persistence            │
-│  • Menyimpan: latitude, longitude, address, location_source             │
-│    ("manual_map" | "gps") ke SavedLocationProfileEntity & StampedPhoto  │
-│  • Aturan: Jika location_source != "gps", abaikan update GPS otomatis   │
+│                     UI Performance & Search Pipeline                    │
+│                                                                         │
+│  [Sensor Magnetometer & Kompas]                                         │
+│       │ (Throttle >= 400ms & Delta Threshold)                           │
+│       ▼                                                                 │
+│  [CameraStampViewModel] ◄── Debounced Preview Baking (Max 1920px)       │
+│       │                                                                 │
+│       ├──► [BitmapStampRenderer]                                        │
+│       │      • Mini-Map Square 1:1 Lock (mapWidth == cardHeight)        │
+│       │      • Center-Crop Tile & Sharp Vector Pin / Google Logo        │
+│       │      • InfoCardWidth-Proportional Font Scaling (Full Space)     │
+│       │                                                                 │
+│       └──► [InteractiveMapPickerDialog]                                 │
+│              • Search Input + Debounced Forward Geocoding Dropdown      │
+│              • Integer Tile-Index LaunchedEffect (Zero Drag Lag)        │
+│              • Pre-cached ImageBitmap Tile Map (60 FPS Canvas Draw)     │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Data Model & Schema Updates**:
-  - `LocationMetadata`:
-    - `latitude: Double`
-    - `longitude: Double`
-    - `address / fullAddress: String` (beserta rincian `street`, `subLocality`, `locality`, `city`, `province`, `postalCode`, `country`)
-    - `locationSource: String` (`"gps"`, `"manual_map"`, atau `"manual_form"`)
-    - `plusCode: String` (otomatis dihitung dengan algoritma Open Location Code dari `latitude` & `longitude`, atau diedit manual)
-    - `magneticFieldUt: Float` (kekuatan medan magnet dalam `µT` dari sensor magnetometer)
-  - `SavedLocationProfileEntity` & `StampedPhotoEntity` (Room Database v2):
-    - Menyimpan `latitude`, `longitude`, `address`, `locationSource`, `plusCode`, dan komponen alamat agar saat aplikasi dibuka ulang atau data diinspeksi kembali, lokasi yang dipilih pengguna tetap terjaga.
+### Rincian Implementasi Teknis
+
+1. **Perbaikan Renderer Stamp (`BitmapStampRenderer` & `LiveStampOverlayCard` & `StampModels`)**:
+   - Menghitung ukuran font `titlePaint` dan `bodyPaint` pada Template 1 serta `headerPaint` dan `rowPaint` pada Template 2 sebagai persentase dari lebar kartu informasi (`infoCardWidth`) sehingga teks selalu proporsional dan memenuhi kartu kanan.
+   - Mengunci ukuran kartu mini-map menjadi persegi `1:1` (`mapCardWidth = cardHeight`) dan menggambar peta dengan *Center-Crop* sehingga peta tidak pernah gepeng.
+   - Membersihkan duplikasi Plus Code pada alamat jika hasil geocoding sudah menyertakan Plus Code di awal kalimat.
+2. **Pencarian Lokasi/Tempat (`LocationAndCompassEngine` & `InteractiveMapPickerModal`)**:
+   - Menambahkan model `PlaceSearchResult(displayName, latitude, longitude, addressParts)` dan fungsi `searchPlaces(query: String): List<PlaceSearchResult>`.
+   - Menambahkan bilah pencarian interaktif di bagian atas `InteractiveMapPickerDialog` dengan tombol Cari, indikator loading, dan daftar hasil pencarian yang ketika dipilih langsung mengarahkan peta & pin ke lokasi tersebut.
+3. **Optimasi Performa UI (`LocationAndCompassEngine`, `CameraStampViewModel`, `InteractiveMapPickerModal`)**:
+   - Menambahkan pembatas waktu (*throttle* `400ms`) pada `observeCompassAndMagnetic()`.
+   - Mengoptimalkan `InteractiveMapPickerDialog` agar penyimpanan tile menggunakan `ImageBitmap` siap pakai dan `LaunchedEffect` hanya berjalan saat koordinat tile bulat (`baseTileX`, `baseTileY`, `zoomLevel`, `isSatelliteLayer`) berubah.
+   - Membatalkan *coroutine job* `bakePreviewBitmap` sebelumnya saat ada perubahan berturut-turut dan mengoptimalkan ukuran bitmap kerja agar render pratinjau berjalan instan.
+4. **Kompilasi, Pengujian & Pembaruan Rilis GitHub**:
+   - Memverifikasi aplikasi dengan `compile_applet` dan unit test, lalu melakukan *commit*, *push* ke GitHub, serta memperbarui APK Release di GitHub Releases.

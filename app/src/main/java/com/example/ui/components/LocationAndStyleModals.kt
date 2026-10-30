@@ -68,6 +68,7 @@ import com.example.model.StampPosition
 import com.example.model.StampStyleConfig
 import com.example.model.StampTemplate
 import com.example.sensor.GeocodedAddressParts
+import com.example.sensor.PlaceSearchResult
 import com.example.stamp.MapTileFetcher
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.CompassCyan
@@ -154,6 +155,7 @@ fun LocationEditModalSheet(
     location: LocationMetadata,
     mapTileFetcher: MapTileFetcher,
     onReverseGeocodeRequest: suspend (Double, Double) -> GeocodedAddressParts?,
+    onSearchPlacesRequest: suspend (String) -> List<PlaceSearchResult> = { emptyList() },
     onRequestMyGpsLocation: suspend () -> Pair<Double, Double>?,
     onDismiss: () -> Unit,
     onSaveLocation: (
@@ -640,6 +642,7 @@ fun LocationEditModalSheet(
             initialAddress = location.fullAddress,
             mapTileFetcher = mapTileFetcher,
             onReverseGeocodeRequest = onReverseGeocodeRequest,
+            onSearchPlacesRequest = onSearchPlacesRequest,
             onRequestMyGpsLocation = onRequestMyGpsLocation,
             onDismissCancel = {
                 // Pressing "Batal" discards unconfirmed map movements

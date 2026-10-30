@@ -1,6 +1,6 @@
 {
-  "summary":  "Updated implementation plan combining the 100% pixel-accurate 2 reference stamp templates (Template 1 Satellite Brebes style & Template 2 Light Street Map + Magnetometer µT style) with the full Interactive Map Location Picker feature (pan, zoom, tap-to-place/drag marker, 'Lokasi Saya' helper, 'Pilih Lokasi / OK' vs 'Batal' transactional state, automatic reverse geocoding + Plus Code, strict protection against GPS overwrite, and Room database persistence including 'location_source').",
-  "updatedAt":  "2026-10-30T14:20:51.172061441Z",
+  "summary":  "Rencana pembaruan lengkap yang mencakup:\n1. Perbaikan Proporsi Mini-Map Persegi 1:1 Anti-Gepeng (Center-Crop) & Skala Font Kartu Penuh (sesuai contoh lingkaran hijau).\n2. Optimasi Performa & Kelancaran UI (60 FPS Smooth UI): pembatasan frekuensi sensor kompas/magnetometer agar tidak memicu rekomposisi berlebih, optimasi pemuatan tile peta berbasis indeks integer (bukan tiap piksel geseran), caching ImageBitmap, dan pembatalan job render pratinjau beruntun.\n3. Fitur Pencarian Tempat/Lokasi (Search Place & Alamat) pada Peta Interaktif (Interactive Map Picker) menggunakan Android Geocoder + OpenStreetMap Nominatim Search API beserta daftar saran hasil pencarian.",
+  "updatedAt":  "2026-10-30T15:35:09.230234753Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
