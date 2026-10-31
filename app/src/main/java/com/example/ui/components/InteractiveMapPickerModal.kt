@@ -13,8 +13,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,8 +45,6 @@ import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -92,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import com.example.model.LocationSource
 import com.example.model.PlusCodeGenerator
@@ -124,22 +122,6 @@ data class PickedMapLocationResult(
     val locationSource: String = LocationSource.MANUAL_MAP
 )
 
-private data class MapQuickRegion(
-    val name: String,
-    val lat: Double,
-    val lon: Double,
-    val defaultAddress: String
-)
-
-private val quickMapRegions = listOf(
-    MapQuickRegion("Brebes (Ref 1)", -6.887405, 109.035938, "Jl. Sapphire Regency, Pulosari, Kec. Brebes, Jawa Tengah 52213"),
-    MapQuickRegion("Slawi / Tegal", -6.978291, 109.140948, "Procot, Kecamatan Slawi, Kabupaten Tegal, Jawa Tengah 52411"),
-    MapQuickRegion("Moskva (Ref 2)", 55.739900, 37.601600, "1-Y Zachat'yevskiy Pereulok, 15, Moskva, Rusia, 119034"),
-    MapQuickRegion("Jakarta Monas", -6.175392, 106.827153, "Jl. Medan Merdeka Utara, Gambir, Jakarta Pusat"),
-    MapQuickRegion("Surabaya", -7.257472, 112.752088, "Jl. Tunjungan No. 65, Genteng, Kota Surabaya")
-)
-
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InteractiveMapPickerDialog(
     initialLatitude: Double,
@@ -156,17 +138,20 @@ fun InteractiveMapPickerDialog(
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
 
+    val safeInitLat = if (initialLatitude.isNaN() || initialLatitude.isInfinite()) -6.887405 else initialLatitude.coerceIn(-85.0, 85.0)
+    val safeInitLon = if (initialLongitude.isNaN() || initialLongitude.isInfinite()) 109.035938 else initialLongitude.coerceIn(-180.0, 180.0)
+
     // Draft Map Viewport Center & Zoom (only committed when user clicks "Pilih Lokasi / OK")
-    var viewportCenterLat by remember { mutableDoubleStateOf(initialLatitude.coerceIn(-85.0, 85.0)) }
-    var viewportCenterLon by remember { mutableDoubleStateOf(initialLongitude.coerceIn(-180.0, 180.0)) }
+    var viewportCenterLat by remember(safeInitLat, safeInitLon) { mutableDoubleStateOf(safeInitLat) }
+    var viewportCenterLon by remember(safeInitLat, safeInitLon) { mutableDoubleStateOf(safeInitLon) }
     var zoomLevel by remember { mutableIntStateOf(16) }
     var isSatelliteLayer by remember { mutableStateOf(false) }
 
     // Draft Selected Marker Point (can be placed by tapping anywhere on the map, dragging, or searching)
-    var selectedLat by remember { mutableDoubleStateOf(initialLatitude.coerceIn(-85.0, 85.0)) }
-    var selectedLon by remember { mutableDoubleStateOf(initialLongitude.coerceIn(-180.0, 180.0)) }
-    var draftAddress by remember { mutableStateOf(initialAddress) }
-    var draftGeocodedParts by remember { mutableStateOf<GeocodedAddressParts?>(null) }
+    var selectedLat by remember(safeInitLat, safeInitLon) { mutableDoubleStateOf(safeInitLat) }
+    var selectedLon by remember(safeInitLat, safeInitLon) { mutableDoubleStateOf(safeInitLon) }
+    var draftAddress by remember(safeInitLat, safeInitLon) { mutableStateOf(initialAddress) }
+    var draftGeocodedParts by remember(safeInitLat, safeInitLon) { mutableStateOf<GeocodedAddressParts?>(null) }
     var isGeocodingLoading by remember { mutableStateOf(false) }
     var lockMarkerToCenterOnPan by remember { mutableStateOf(true) }
 
@@ -254,6 +239,7 @@ fun InteractiveMapPickerDialog(
             draftGeocodedParts = item.addressParts
             draftAddress = item.subtitle.ifBlank { item.title }
         } else {
+            draftGeocodedParts = null
             draftAddress = item.subtitle.ifBlank { item.title }
             triggerDraftReverseGeocode(viewportCenterLat, viewportCenterLon, draftAddress)
         }
@@ -300,6 +286,8 @@ fun InteractiveMapPickerDialog(
                     viewportCenterLon = myLoc.second
                     selectedLat = myLoc.first
                     selectedLon = myLoc.second
+                    draftGeocodedParts = null
+                    draftAddress = String.format(Locale.US, "Koordinat Terpilih (%.6f, %.6f)", myLoc.first, myLoc.second)
                     triggerDraftReverseGeocode(myLoc.first, myLoc.second)
                 }
             }
@@ -321,239 +309,226 @@ fun InteractiveMapPickerDialog(
                 .navigationBarsPadding()
                 .testTag("interactive_map_picker_dialog")
         ) {
-            // 1. Header Bar
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(TacticalSurface)
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = SignalAmber,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            text = "Pilih Lokasi Manual di Peta",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "Cari nama tempat/jalan, geser peta, atau ketuk titik lokasi",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-                IconButton(
-                    onClick = onDismissCancel,
-                    modifier = Modifier.testTag("map_header_close_button")
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = "Batal", tint = TextSecondary)
-                }
-            }
-
-            // 2. Search Place / Address Bar + Quick Jump Chips
+            // 1. Header Bar (Always on top with solid background & divider)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(TacticalSurfaceVariant)
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .zIndex(3f)
+                    .background(TacticalSurface)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { newText ->
-                            searchQuery = newText
-                            executePlaceSearch(newText, immediate = false)
-                        },
-                        placeholder = {
-                            Text(
-                                text = "Cari tempat, jalan, kecamatan, kota...",
-                                fontSize = 12.5.sp,
-                                color = TextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Cari Lokasi",
-                                tint = CompassCyan,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        },
-                        trailingIcon = {
-                            if (isSearchingPlaces) {
-                                CircularProgressIndicator(
-                                    color = SignalAmber,
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            } else if (searchQuery.isNotEmpty()) {
-                                IconButton(
-                                    onClick = {
-                                        searchQuery = ""
-                                        searchResults = emptyList()
-                                        showSearchResultsDropdown = false
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Clear,
-                                        contentDescription = "Hapus Pencarian",
-                                        tint = TextSecondary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(
-                            onSearch = {
-                                focusManager.clearFocus()
-                                executePlaceSearch(searchQuery, immediate = true)
-                            }
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = ObsidianBackground,
-                            unfocusedContainerColor = ObsidianBackground,
-                            focusedBorderColor = CompassCyan,
-                            unfocusedBorderColor = BorderSubtle,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("map_search_input")
-                    )
-
-                    Button(
-                        onClick = {
-                            focusManager.clearFocus()
-                            executePlaceSearch(searchQuery, immediate = true)
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CompassCyan,
-                            contentColor = ObsidianBackground
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .height(52.dp)
-                            .testTag("map_search_submit_button")
-                    ) {
-                        Text(
-                            text = "Cari",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = SignalAmber,
+                            modifier = Modifier.size(22.dp)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Pilih Lokasi Manual di Peta",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Cari nama tempat/jalan, geser peta, atau ketuk titik lokasi",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onDismissCancel,
+                        modifier = Modifier.testTag("map_header_close_button")
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Batal", tint = TextSecondary)
                     }
                 }
+                HorizontalDivider(color = BorderSubtle, thickness = 1.dp)
+            }
 
-                // Dropdown list of matching places from Search
-                if (showSearchResultsDropdown && searchResults.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Surface(
-                        color = ObsidianBackground,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, CompassCyan.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
-                            .testTag("map_search_results_list")
+            // 2. Search Section (Solid background, above map, without preset buttons)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(2f)
+                    .background(TacticalSurfaceVariant)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 190.dp)
-                        ) {
-                            items(searchResults) { item ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectPlaceFromSearchResult(item) }
-                                        .padding(horizontal = 12.dp, vertical = 9.dp)
-                                        .testTag("map_search_result_item")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Place,
-                                        contentDescription = null,
-                                        tint = SignalAmber,
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { newText ->
+                                searchQuery = newText
+                                executePlaceSearch(newText, immediate = false)
+                            },
+                            placeholder = {
+                                Text(
+                                    text = "Cari tempat, jalan, kecamatan, kota...",
+                                    fontSize = 12.5.sp,
+                                    color = TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Cari Lokasi",
+                                    tint = CompassCyan,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            trailingIcon = {
+                                if (isSearchingPlaces) {
+                                    CircularProgressIndicator(
+                                        color = SignalAmber,
+                                        strokeWidth = 2.dp,
                                         modifier = Modifier.size(18.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = item.title,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 12.5.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = item.subtitle,
-                                            color = TextSecondary,
-                                            fontSize = 11.sp,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
+                                } else if (searchQuery.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = {
+                                            searchQuery = ""
+                                            searchResults = emptyList()
+                                            showSearchResultsDropdown = false
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Clear,
+                                            contentDescription = "Hapus Pencarian",
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
                                 }
-                                HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(
+                                onSearch = {
+                                    focusManager.clearFocus()
+                                    executePlaceSearch(searchQuery, immediate = true)
+                                }
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = ObsidianBackground,
+                                unfocusedContainerColor = ObsidianBackground,
+                                focusedBorderColor = CompassCyan,
+                                unfocusedBorderColor = BorderSubtle,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("map_search_input")
+                        )
+
+                        Button(
+                            onClick = {
+                                focusManager.clearFocus()
+                                executePlaceSearch(searchQuery, immediate = true)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = CompassCyan,
+                                contentColor = ObsidianBackground
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .height(52.dp)
+                                .testTag("map_search_submit_button")
+                        ) {
+                            Text(
+                                text = "Cari",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
+                    // Dropdown list of matching places from Search
+                    if (showSearchResultsDropdown && searchResults.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            color = ObsidianBackground,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, CompassCyan.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                                .testTag("map_search_results_list")
+                        ) {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 190.dp)
+                            ) {
+                                items(searchResults) { item ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { selectPlaceFromSearchResult(item) }
+                                            .padding(horizontal = 12.dp, vertical = 9.dp)
+                                            .testTag("map_search_result_item")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Place,
+                                            contentDescription = null,
+                                            tint = SignalAmber,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = item.title,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 12.5.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = item.subtitle,
+                                                color = TextSecondary,
+                                                fontSize = 11.sp,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                    HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
+                                }
                             }
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    quickMapRegions.forEach { region ->
-                        FilterChip(
-                            selected = false,
-                            onClick = {
-                                showSearchResultsDropdown = false
-                                viewportCenterLat = region.lat
-                                viewportCenterLon = region.lon
-                                selectedLat = region.lat
-                                selectedLon = region.lon
-                                draftAddress = region.defaultAddress
-                                triggerDraftReverseGeocode(region.lat, region.lon, region.defaultAddress)
-                            },
-                            label = { Text(region.name, fontSize = 10.5.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = ObsidianBackground,
-                                labelColor = Color.White
-                            ),
-                            modifier = Modifier.testTag("map_preset_${region.name.take(6).lowercase(Locale.US)}")
-                        )
-                    }
-                }
+                HorizontalDivider(color = BorderSubtle, thickness = 1.dp)
             }
 
-            // 3. Interactive Multi-Tile Map Canvas (60 FPS Pre-Cached ImageBitmap Rendering)
+            // 3. Interactive Multi-Tile Map Canvas (Strictly clipped to Map Section bounds)
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .zIndex(0f)
+                    .clipToBounds()
                     .onSizeChanged { size ->
                         if (size.width > 0 && size.height > 0) {
                             canvasSize = size
@@ -563,6 +538,9 @@ fun InteractiveMapPickerDialog(
                         detectDragGestures(
                             onDragStart = {
                                 showSearchResultsDropdown = false
+                                if (lockMarkerToCenterOnPan) {
+                                    draftGeocodedParts = null
+                                }
                             },
                             onDragEnd = {
                                 if (lockMarkerToCenterOnPan) {
@@ -589,6 +567,8 @@ fun InteractiveMapPickerDialog(
                             if (lockMarkerToCenterOnPan) {
                                 selectedLat = newLat
                                 selectedLon = newLon
+                                draftGeocodedParts = null
+                                draftAddress = String.format(Locale.US, "Koordinat Terpilih (%.6f, %.6f)", newLat, newLon)
                             }
                         }
                     }
@@ -616,6 +596,8 @@ fun InteractiveMapPickerDialog(
                             )
                             selectedLat = tappedLat
                             selectedLon = tappedLon
+                            draftGeocodedParts = null
+                            draftAddress = String.format(Locale.US, "Koordinat Terpilih (%.6f, %.6f)", tappedLat, tappedLon)
                             if (lockMarkerToCenterOnPan) {
                                 viewportCenterLat = tappedLat
                                 viewportCenterLon = tappedLon
@@ -625,7 +607,11 @@ fun InteractiveMapPickerDialog(
                     }
                     .testTag("interactive_map_canvas")
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clipToBounds()
+                ) {
                     val tileRenderPx = 512f
                     val viewCenterX = size.width / 2f
                     val viewCenterY = size.height / 2f
@@ -845,6 +831,8 @@ fun InteractiveMapPickerDialog(
                                         viewportCenterLon = myLoc.second
                                         selectedLat = myLoc.first
                                         selectedLon = myLoc.second
+                                        draftGeocodedParts = null
+                                        draftAddress = String.format(Locale.US, "Koordinat Terpilih (%.6f, %.6f)", myLoc.first, myLoc.second)
                                         triggerDraftReverseGeocode(myLoc.first, myLoc.second)
                                     }
                                 }
@@ -874,9 +862,15 @@ fun InteractiveMapPickerDialog(
             }
 
             // 4. Bottom Selected Point Info & Confirmation Panel ("Batal" vs "Pilih Lokasi / OK")
+            HorizontalDivider(
+                color = BorderSubtle,
+                thickness = 1.dp,
+                modifier = Modifier.zIndex(2f)
+            )
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .zIndex(2f)
                     .background(TacticalSurface)
                     .padding(14.dp)
             ) {

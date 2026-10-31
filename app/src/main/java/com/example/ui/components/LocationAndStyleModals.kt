@@ -180,22 +180,34 @@ fun LocationEditModalSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var isManual by remember(location) { mutableStateOf(location.isManualLocation) }
-    var locationSource by remember(location) { mutableStateOf(location.locationSource) }
-    var latText by remember(location) { mutableStateOf(location.latitude.toString()) }
-    var lonText by remember(location) { mutableStateOf(location.longitude.toString()) }
-    var altText by remember(location) { mutableStateOf(location.altitudeMeters.toString()) }
-    var plusCode by remember(location) { mutableStateOf(location.plusCode) }
-    var street by remember(location) { mutableStateOf(location.street) }
-    var subLocality by remember(location) { mutableStateOf(location.subLocality) }
-    var locality by remember(location) { mutableStateOf(location.locality) }
-    var city by remember(location) { mutableStateOf(location.city) }
-    var province by remember(location) { mutableStateOf(location.province) }
-    var postalCode by remember(location) { mutableStateOf(location.postalCode) }
-    var country by remember(location) { mutableStateOf(location.country) }
-    var showCountryFlag by remember(location) { mutableStateOf(location.showCountryFlag) }
-    var projectNote by remember(location) { mutableStateOf(location.projectNote) }
-    var customFullAddressOverride by remember(location) {
+    // Key form state on coordinate & address identity ONLY (excluding 400ms compass/magnetic sensor ticks)
+    val locationIdentityKey = remember(
+        location.latitude,
+        location.longitude,
+        location.isManualLocation,
+        location.locationSource,
+        location.fullAddress,
+        location.projectNote
+    ) {
+        "${location.latitude}_${location.longitude}_${location.isManualLocation}_${location.locationSource}_${location.fullAddress}_${location.projectNote}"
+    }
+
+    var isManual by remember(locationIdentityKey) { mutableStateOf(location.isManualLocation) }
+    var locationSource by remember(locationIdentityKey) { mutableStateOf(location.locationSource) }
+    var latText by remember(locationIdentityKey) { mutableStateOf(location.latitude.toString()) }
+    var lonText by remember(locationIdentityKey) { mutableStateOf(location.longitude.toString()) }
+    var altText by remember(locationIdentityKey) { mutableStateOf(location.altitudeMeters.toString()) }
+    var plusCode by remember(locationIdentityKey) { mutableStateOf(location.plusCode) }
+    var street by remember(locationIdentityKey) { mutableStateOf(location.street) }
+    var subLocality by remember(locationIdentityKey) { mutableStateOf(location.subLocality) }
+    var locality by remember(locationIdentityKey) { mutableStateOf(location.locality) }
+    var city by remember(locationIdentityKey) { mutableStateOf(location.city) }
+    var province by remember(locationIdentityKey) { mutableStateOf(location.province) }
+    var postalCode by remember(locationIdentityKey) { mutableStateOf(location.postalCode) }
+    var country by remember(locationIdentityKey) { mutableStateOf(location.country) }
+    var showCountryFlag by remember(locationIdentityKey) { mutableStateOf(location.showCountryFlag) }
+    var projectNote by remember(locationIdentityKey) { mutableStateOf(location.projectNote) }
+    var customFullAddressOverride by remember(locationIdentityKey) {
         mutableStateOf(location.customFullAddressOverride)
     }
 
@@ -649,25 +661,50 @@ fun LocationEditModalSheet(
                 showInteractiveMapPicker = false
             },
             onConfirmLocation = { picked ->
-                // Pressing "Pilih Lokasi (OK)" updates the form with confirmed coordinates & address
+                // Pressing "Pilih Lokasi (OK)" immediately updates state AND persists to ViewModel + Room DB
+                val parts = picked.geocodedParts
+                val newStreet = parts?.street ?: ""
+                val newSubLocality = parts?.subLocality ?: ""
+                val newLocality = parts?.locality ?: ""
+                val newCity = parts?.city ?: ""
+                val newProvince = parts?.province ?: ""
+                val newPostalCode = parts?.postalCode ?: ""
+                val newCountry = parts?.country?.ifBlank { country.ifBlank { "Indonesia" } } ?: country.ifBlank { "Indonesia" }
+                val hasStructuredAddress = newStreet.isNotBlank() || newLocality.isNotBlank() || newCity.isNotBlank() || newProvince.isNotBlank()
+                val newCustomAddress = if (hasStructuredAddress) "" else picked.addressText
+
                 isManual = true
                 locationSource = LocationSource.MANUAL_MAP
                 latText = String.format(java.util.Locale.US, "%.6f", picked.latitude)
                 lonText = String.format(java.util.Locale.US, "%.6f", picked.longitude)
                 plusCode = picked.plusCode
-                val parts = picked.geocodedParts
-                if (parts != null) {
-                    street = parts.street.ifBlank { street }
-                    subLocality = parts.subLocality
-                    locality = parts.locality
-                    city = parts.city
-                    province = parts.province
-                    postalCode = parts.postalCode
-                    country = parts.country.ifBlank { country }
-                    customFullAddressOverride = ""
-                } else {
-                    customFullAddressOverride = picked.addressText
-                }
+                street = newStreet
+                subLocality = newSubLocality
+                locality = newLocality
+                city = newCity
+                province = newProvince
+                postalCode = newPostalCode
+                country = newCountry
+                customFullAddressOverride = newCustomAddress
+
+                onSaveLocation(
+                    true,
+                    LocationSource.MANUAL_MAP,
+                    picked.latitude,
+                    picked.longitude,
+                    altText.toDoubleOrNull() ?: location.altitudeMeters,
+                    picked.plusCode,
+                    newStreet,
+                    newSubLocality,
+                    newLocality,
+                    newCity,
+                    newProvince,
+                    newPostalCode,
+                    newCountry,
+                    showCountryFlag,
+                    projectNote,
+                    newCustomAddress
+                )
                 showInteractiveMapPicker = false
             }
         )

@@ -103,6 +103,7 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
     private var lastMapLat: Double = Double.NaN
     private var lastMapLon: Double = Double.NaN
     private var lastMapSatellite: Boolean? = null
+    private var hasUserModifiedLocation: Boolean = false
 
     init {
         loadSavedLocationProfileFromDatabase()
@@ -114,7 +115,7 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
     private fun loadSavedLocationProfileFromDatabase() {
         viewModelScope.launch {
             val savedProfile = repository.getSavedLocationProfileOnce()
-            if (savedProfile != null) {
+            if (savedProfile != null && !hasUserModifiedLocation) {
                 _locationState.update { current ->
                     current.copy(
                         isManualLocation = savedProfile.isManualLocation,
@@ -394,8 +395,16 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
         projectNote: String,
         customFullAddressOverride: String = ""
     ) {
+        hasUserModifiedLocation = true
+
+        val fallbackLat = _locationState.value.latitude.takeUnless { it.isNaN() || it.isInfinite() } ?: -6.887405
+        val fallbackLon = _locationState.value.longitude.takeUnless { it.isNaN() || it.isInfinite() } ?: 109.035938
+        val safeLat = if (latitude.isNaN() || latitude.isInfinite()) fallbackLat else latitude.coerceIn(-90.0, 90.0)
+        val safeLon = if (longitude.isNaN() || longitude.isInfinite()) fallbackLon else longitude.coerceIn(-180.0, 180.0)
+        val safeAlt = if (altitudeMeters.isNaN() || altitudeMeters.isInfinite()) 0.0 else altitudeMeters
+
         val resolvedPlusCode = plusCode.ifBlank {
-            PlusCodeGenerator.generateShortPlusCode(latitude, longitude)
+            PlusCodeGenerator.generateShortPlusCode(safeLat, safeLon)
         }
         val resolvedSource = if (isManual) {
             if (locationSource == LocationSource.GPS) LocationSource.MANUAL_FORM else locationSource
@@ -407,9 +416,9 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
             current.copy(
                 isManualLocation = isManual,
                 locationSource = resolvedSource,
-                latitude = latitude,
-                longitude = longitude,
-                altitudeMeters = altitudeMeters,
+                latitude = safeLat,
+                longitude = safeLon,
+                altitudeMeters = safeAlt,
                 plusCode = resolvedPlusCode,
                 street = street,
                 subLocality = subLocality,
@@ -417,7 +426,7 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
                 city = city,
                 province = province,
                 postalCode = postalCode,
-                country = country,
+                country = country.ifBlank { "Indonesia" },
                 showCountryFlag = showCountryFlag,
                 projectNote = projectNote,
                 customFullAddressOverride = customFullAddressOverride
@@ -426,31 +435,75 @@ class CameraStampViewModel(application: Application) : AndroidViewModel(applicat
 
         val updatedState = _locationState.value
         viewModelScope.launch {
-            repository.saveLocationProfile(
-                SavedLocationProfileEntity(
-                    id = 1,
-                    isManualLocation = updatedState.isManualLocation,
-                    locationSource = updatedState.locationSource,
-                    latitude = updatedState.latitude,
-                    longitude = updatedState.longitude,
-                    address = updatedState.fullAddress,
-                    plusCode = updatedState.plusCode,
-                    street = updatedState.street,
-                    subLocality = updatedState.subLocality,
-                    locality = updatedState.locality,
-                    city = updatedState.city,
-                    province = updatedState.province,
-                    postalCode = updatedState.postalCode,
-                    country = updatedState.country,
-                    showCountryFlag = updatedState.showCountryFlag,
-                    altitudeMeters = updatedState.altitudeMeters,
-                    projectNote = updatedState.projectNote
-                )
-            )
+            persistLocationStateToDatabase(updatedState)
+
+            // If user confirmed a point on the map before the 320ms reverse-geocoding debounce finished,
+            // resolve the structured address for (safeLat, safeLon) in the background and persist it.
+            val needsReverseGeocode = isManual &&
+                street.isBlank() &&
+                locality.isBlank() &&
+                city.isBlank() &&
+                province.isBlank()
+            if (needsReverseGeocode) {
+                val geocoded = locationEngine.reverseGeocode(safeLat, safeLon)
+                val latest = _locationState.value
+                if (geocoded != null &&
+                    abs(latest.latitude - safeLat) < 1e-6 &&
+                    abs(latest.longitude - safeLon) < 1e-6
+                ) {
+                    _locationState.update { cur ->
+                        cur.copy(
+                            street = geocoded.street,
+                            subLocality = geocoded.subLocality,
+                            locality = geocoded.locality,
+                            city = geocoded.city,
+                            province = geocoded.province,
+                            postalCode = geocoded.postalCode,
+                            country = geocoded.country.ifBlank { cur.country.ifBlank { "Indonesia" } },
+                            customFullAddressOverride = if (
+                                geocoded.street.isNotBlank() ||
+                                geocoded.locality.isNotBlank() ||
+                                geocoded.city.isNotBlank() ||
+                                geocoded.province.isNotBlank()
+                            ) {
+                                ""
+                            } else {
+                                geocoded.formattedAddress.ifBlank { cur.customFullAddressOverride }
+                            }
+                        )
+                    }
+                    persistLocationStateToDatabase(_locationState.value)
+                    reRenderActivePreviewIfNeeded()
+                }
+            }
         }
 
         refreshMiniMap(force = true)
         reRenderActivePreviewIfNeeded()
+    }
+
+    private suspend fun persistLocationStateToDatabase(state: LocationMetadata) {
+        repository.saveLocationProfile(
+            SavedLocationProfileEntity(
+                id = 1,
+                isManualLocation = state.isManualLocation,
+                locationSource = state.locationSource,
+                latitude = state.latitude,
+                longitude = state.longitude,
+                address = state.fullAddress,
+                plusCode = state.plusCode,
+                street = state.street,
+                subLocality = state.subLocality,
+                locality = state.locality,
+                city = state.city,
+                province = state.province,
+                postalCode = state.postalCode,
+                country = state.country,
+                showCountryFlag = state.showCountryFlag,
+                altitudeMeters = state.altitudeMeters,
+                projectNote = state.projectNote
+            )
+        )
     }
 
     fun triggerReverseGeocodeForCurrentCoordinates() {

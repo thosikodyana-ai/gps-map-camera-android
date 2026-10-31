@@ -169,11 +169,21 @@ data class LocationMetadata(
                 locality.ifBlank { city.ifBlank { subLocality } },
                 province
             ).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-            return if (parts.isNotEmpty()) {
-                "${parts.joinToString(", ")},"
-            } else {
-                country.ifBlank { "Indonesia" }
+            if (parts.isNotEmpty()) {
+                return "${parts.joinToString(", ")},"
             }
+            if (customFullAddressOverride.isNotBlank()) {
+                val tokens = PlusCodeGenerator.stripLeadingPlusCodes(customFullAddressOverride)
+                    .split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.equals(country, ignoreCase = true) }
+                if (tokens.size >= 2) {
+                    return "${tokens.takeLast(2).joinToString(", ")},"
+                } else if (tokens.isNotEmpty()) {
+                    return "${tokens.first()},"
+                }
+            }
+            return "${country.ifBlank { "Indonesia" }},"
         }
 
     /**
@@ -188,11 +198,21 @@ data class LocationMetadata(
      * "Kecamatan Brebes, Jawa Tengah,\nIndonesia"
      */
     val template1Headline: String
-        get() = listOf(
-            locality.ifBlank { city.ifBlank { subLocality } },
-            province,
-            country
-        ).map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", ")
+        get() {
+            val structured = listOf(
+                locality.ifBlank { city.ifBlank { subLocality } },
+                province,
+                country
+            ).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            return if (structured.size >= 2) {
+                structured.joinToString(", ")
+            } else if (customFullAddressOverride.isNotBlank()) {
+                val line1 = template1HeaderLine1.removeSuffix(",")
+                listOf(line1, template1HeaderLine2).filter { it.isNotBlank() }.distinct().joinToString(", ")
+            } else {
+                structured.joinToString(", ")
+            }
+        }
 
     /**
      * Body address for Reference Template 1 (Image 1 / Green Circle):

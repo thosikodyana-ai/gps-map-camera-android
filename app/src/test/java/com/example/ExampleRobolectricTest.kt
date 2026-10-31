@@ -146,4 +146,225 @@ class ExampleRobolectricTest {
         assertEquals(800, renderedTemplate2.width)
         assertEquals(600, renderedTemplate2.height)
     }
+
+    @Test
+    fun testA_selectNewManualMapLocationAndConfirmOk_savesNewLocationWithoutRevertingToOld() = runBlocking {
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        val viewModel = CameraStampViewModel(application)
+
+        // Initial location A (Brebes)
+        assertEquals(-6.887405, viewModel.locationState.value.latitude, 1e-5)
+        assertEquals(109.035938, viewModel.locationState.value.longitude, 1e-5)
+
+        // User selects new location B on map (Kramat, Tegal) and presses "Pilih Lokasi (OK)"
+        val newLatB = -6.885461
+        val newLonB = 109.206151
+        viewModel.setManualLocationData(
+            isManual = true,
+            locationSource = LocationSource.MANUAL_MAP,
+            latitude = newLatB,
+            longitude = newLonB,
+            altitudeMeters = 12.0,
+            plusCode = "4674+rf3",
+            street = "Latu, Kertayasa",
+            subLocality = "Kertayasa",
+            locality = "Kec. Kramat",
+            city = "Kabupaten Tegal",
+            province = "Jawa Tengah",
+            postalCode = "52181",
+            country = "Indonesia",
+            showCountryFlag = true,
+            projectNote = "Captured by GPS Map Camera",
+            customFullAddressOverride = ""
+        )
+
+        val stateAfterOk = viewModel.locationState.value
+        assertTrue(stateAfterOk.isManualLocation)
+        assertEquals(LocationSource.MANUAL_MAP, stateAfterOk.locationSource)
+        assertEquals(newLatB, stateAfterOk.latitude, 1e-6)
+        assertEquals(newLonB, stateAfterOk.longitude, 1e-6)
+        assertEquals("Kec. Kramat", stateAfterOk.locality)
+        assertEquals("Kabupaten Tegal", stateAfterOk.city)
+        assertTrue(stateAfterOk.template1HeaderLine1.contains("Kec. Kramat"))
+        assertTrue(!stateAfterOk.template1HeaderLine1.contains("Brebes"))
+    }
+
+    @Test
+    fun testB_and_testE_reopenMapAndRecreateState_loadsLastSavedManualLocationFromRoomDb() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        val repository = PhotoHistoryRepository(db.stampedPhotoDao())
+
+        // Save location B
+        val savedB = SavedLocationProfileEntity(
+            id = 1,
+            isManualLocation = true,
+            locationSource = LocationSource.MANUAL_MAP,
+            latitude = -6.885461,
+            longitude = 109.206151,
+            address = "Latu, Kertayasa, Kec. Kramat, Kabupaten Tegal, Jawa Tengah 52181, Indonesia",
+            plusCode = "4674+rf3",
+            street = "Latu, Kertayasa",
+            subLocality = "Kertayasa",
+            locality = "Kec. Kramat",
+            city = "Kabupaten Tegal",
+            province = "Jawa Tengah",
+            postalCode = "52181",
+            country = "Indonesia",
+            showCountryFlag = true,
+            altitudeMeters = 12.0,
+            projectNote = "Captured by GPS Map Camera"
+        )
+        repository.saveLocationProfile(savedB)
+
+        // Reopen / reload saved location profile
+        val reloaded = repository.getSavedLocationProfileOnce()
+        assertNotNull(reloaded)
+        assertEquals(-6.885461, reloaded!!.latitude, 1e-6)
+        assertEquals(109.206151, reloaded.longitude, 1e-6)
+        assertEquals("Kec. Kramat", reloaded.locality)
+        assertEquals(LocationSource.MANUAL_MAP, reloaded.locationSource)
+        db.close()
+    }
+
+    @Test
+    fun testC_sequentialManualLocationUpdates_B_to_C_to_D_alwaysReflectsLatestSelection() = runBlocking {
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        val viewModel = CameraStampViewModel(application)
+
+        // Step 1: Location B (Kramat, Tegal)
+        viewModel.setManualLocationData(
+            isManual = true,
+            locationSource = LocationSource.MANUAL_MAP,
+            latitude = -6.885461,
+            longitude = 109.206151,
+            altitudeMeters = 10.0,
+            plusCode = "",
+            street = "Kertayasa",
+            subLocality = "",
+            locality = "Kec. Kramat",
+            city = "Kabupaten Tegal",
+            province = "Jawa Tengah",
+            postalCode = "52181",
+            country = "Indonesia",
+            showCountryFlag = true,
+            projectNote = "Note B"
+        )
+        assertEquals(-6.885461, viewModel.locationState.value.latitude, 1e-6)
+        assertEquals("Kec. Kramat", viewModel.locationState.value.locality)
+
+        // Step 2: Location C (Slawi)
+        viewModel.setManualLocationData(
+            isManual = true,
+            locationSource = LocationSource.MANUAL_MAP,
+            latitude = -6.978292,
+            longitude = 109.140945,
+            altitudeMeters = 25.0,
+            plusCode = "",
+            street = "Procot",
+            subLocality = "",
+            locality = "Kecamatan Slawi",
+            city = "Kabupaten Tegal",
+            province = "Jawa Tengah",
+            postalCode = "52411",
+            country = "Indonesia",
+            showCountryFlag = true,
+            projectNote = "Note C"
+        )
+        assertEquals(-6.978292, viewModel.locationState.value.latitude, 1e-6)
+        assertEquals("Kecamatan Slawi", viewModel.locationState.value.locality)
+
+        // Step 3: Location D (Semarang) — even when confirmed with only customFullAddressOverride before geocoding finishes
+        viewModel.setManualLocationData(
+            isManual = true,
+            locationSource = LocationSource.MANUAL_MAP,
+            latitude = -6.966667,
+            longitude = 110.416664,
+            altitudeMeters = 15.0,
+            plusCode = "",
+            street = "",
+            subLocality = "",
+            locality = "",
+            city = "",
+            province = "",
+            postalCode = "",
+            country = "Indonesia",
+            showCountryFlag = true,
+            projectNote = "Note D",
+            customFullAddressOverride = "Jl. Pemuda, Sekayu, Kec. Semarang Tengah, Kota Semarang, Jawa Tengah, Indonesia"
+        )
+        val stateD = viewModel.locationState.value
+        assertEquals(-6.966667, stateD.latitude, 1e-6)
+        assertEquals(110.416664, stateD.longitude, 1e-6)
+        assertTrue(!stateD.fullAddress.contains("Slawi"))
+        assertTrue(!stateD.fullAddress.contains("Brebes"))
+        assertTrue(stateD.fullAddress.contains("Semarang"))
+    }
+
+    @Test
+    fun testD_cancelManualLocationSelection_retainsPreviouslySavedLocationD() = runBlocking {
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        val viewModel = CameraStampViewModel(application)
+
+        // Confirm Location D
+        val savedLatD = -6.966667
+        val savedLonD = 110.416664
+        viewModel.setManualLocationData(
+            isManual = true,
+            locationSource = LocationSource.MANUAL_MAP,
+            latitude = savedLatD,
+            longitude = savedLonD,
+            altitudeMeters = 15.0,
+            plusCode = "2cq8+8m",
+            street = "Jl. Pemuda",
+            subLocality = "Sekayu",
+            locality = "Kec. Semarang Tengah",
+            city = "Kota Semarang",
+            province = "Jawa Tengah",
+            postalCode = "50132",
+            country = "Indonesia",
+            showCountryFlag = true,
+            projectNote = "Semarang"
+        )
+
+        // User opens map picker, pans draft coordinates to E (-7.795580, 110.369490), and clicks "Batal" (onDismissCancel)
+        // Because onDismissCancel does NOT invoke setManualLocationData, the ViewModel state must remain D
+        val current = viewModel.locationState.value
+        assertEquals(savedLatD, current.latitude, 1e-6)
+        assertEquals(savedLonD, current.longitude, 1e-6)
+        assertEquals("Kota Semarang", current.city)
+    }
+
+    @Test
+    fun testF_invalidOrOutOfRangeCoordinates_areSafelySanitizedAndClamped() = runBlocking {
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        val viewModel = CameraStampViewModel(application)
+
+        // Pass NaN / out-of-range coordinates
+        viewModel.setManualLocationData(
+            isManual = true,
+            locationSource = LocationSource.MANUAL_MAP,
+            latitude = Double.NaN,
+            longitude = 250.0,
+            altitudeMeters = Double.POSITIVE_INFINITY,
+            plusCode = "",
+            street = "Test Street",
+            subLocality = "",
+            locality = "Test Locality",
+            city = "Test City",
+            province = "Test Province",
+            postalCode = "",
+            country = "Indonesia",
+            showCountryFlag = true,
+            projectNote = "Test"
+        )
+
+        val sanitized = viewModel.locationState.value
+        assertTrue(!sanitized.latitude.isNaN())
+        assertTrue(sanitized.latitude in -90.0..90.0)
+        assertEquals(180.0, sanitized.longitude, 1e-6)
+        assertEquals(0.0, sanitized.altitudeMeters, 1e-6)
+    }
 }

@@ -534,6 +534,16 @@ fun GpsMapCameraScreen(
             onDismissCancel = { showDirectMapPickerModal = false },
             onConfirmLocation = { picked ->
                 val parts = picked.geocodedParts
+                val newStreet = parts?.street ?: ""
+                val newSubLocality = parts?.subLocality ?: ""
+                val newLocality = parts?.locality ?: ""
+                val newCity = parts?.city ?: ""
+                val newProvince = parts?.province ?: ""
+                val newPostalCode = parts?.postalCode ?: ""
+                val newCountry = parts?.country?.ifBlank { locationState.country.ifBlank { "Indonesia" } }
+                    ?: locationState.country.ifBlank { "Indonesia" }
+                val hasStructuredAddress = newStreet.isNotBlank() || newLocality.isNotBlank() || newCity.isNotBlank() || newProvince.isNotBlank()
+
                 viewModel.setManualLocationData(
                     isManual = true,
                     locationSource = LocationSource.MANUAL_MAP,
@@ -541,16 +551,16 @@ fun GpsMapCameraScreen(
                     longitude = picked.longitude,
                     altitudeMeters = locationState.altitudeMeters,
                     plusCode = picked.plusCode,
-                    street = parts?.street?.ifBlank { locationState.street } ?: locationState.street,
-                    subLocality = parts?.subLocality ?: locationState.subLocality,
-                    locality = parts?.locality ?: locationState.locality,
-                    city = parts?.city ?: locationState.city,
-                    province = parts?.province ?: locationState.province,
-                    postalCode = parts?.postalCode ?: locationState.postalCode,
-                    country = parts?.country?.ifBlank { locationState.country } ?: locationState.country,
+                    street = newStreet,
+                    subLocality = newSubLocality,
+                    locality = newLocality,
+                    city = newCity,
+                    province = newProvince,
+                    postalCode = newPostalCode,
+                    country = newCountry,
                     showCountryFlag = locationState.showCountryFlag,
                     projectNote = locationState.projectNote,
-                    customFullAddressOverride = if (parts == null) picked.addressText else ""
+                    customFullAddressOverride = if (hasStructuredAddress) "" else picked.addressText
                 )
                 showDirectMapPickerModal = false
             }
