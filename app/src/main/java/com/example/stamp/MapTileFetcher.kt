@@ -146,8 +146,8 @@ class MapTileFetcher(private val context: Context) {
     /**
      * Renders the exact Mini-Map style of Reference Image 1 (Brebes Satellite):
      * - Aerial satellite terrain texture
-     * - Red teardrop pin in the center with dark inner dot
-     * - White "Google" text with dark outline at the bottom center
+     * - Proportional red teardrop pin in the exact center (pinHeight = mapHeight * 0.25f)
+     * - Clean flat white "Google" logo at the bottom center with ~4dp bottom margin (no rough stroke)
      */
     private fun renderTemplate1SatelliteMiniMap(
         baseTile: Bitmap?,
@@ -170,34 +170,27 @@ class MapTileFetcher(private val context: Context) {
             drawProceduralSatelliteTerrain(canvas, sizePx, latitude, longitude)
         }
 
-        // Red Teardrop Pin in center (matching Image 1)
+        // Red Teardrop Pin centered on map (pinHeight = mapHeight * 0.25f)
+        val pinHeight = sizePx * 0.25f
         drawTeardropMapPin(
             canvas = canvas,
             centerX = sizePx * 0.50f,
-            tipY = sizePx * 0.55f,
-            pinHeight = sizePx * 0.22f
+            tipY = sizePx * 0.50f + pinHeight * 0.30f,
+            pinHeight = pinHeight
         )
 
-        // White "Google" text with dark stroke at bottom center (matching Image 1)
-        val textSize = sizePx * 0.175f
-        val textY = sizePx * 0.89f
-        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(215, 22, 24, 28)
-            this.textSize = textSize
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            style = Paint.Style.STROKE
-            strokeWidth = sizePx * 0.028f
-            strokeJoin = Paint.Join.ROUND
-        }
+        // Clean flat white "Google" text at bottom center with 4dp-equivalent bottom margin
+        val marginBottomPx = sizePx * 0.05f
+        val textSize = sizePx * 0.165f
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             this.textSize = textSize
             textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             style = Paint.Style.FILL
+            setShadowLayer(sizePx * 0.012f, 0f, sizePx * 0.004f, Color.argb(110, 0, 0, 0))
         }
-        canvas.drawText("Google", sizePx * 0.50f, textY, strokePaint)
+        val textY = sizePx - marginBottomPx - (fillPaint.descent() * 0.35f)
         canvas.drawText("Google", sizePx * 0.50f, textY, fillPaint)
 
         return output
@@ -206,8 +199,8 @@ class MapTileFetcher(private val context: Context) {
     /**
      * Renders the exact Mini-Map style of Reference Image 2 (Street Map + Multicolored Google):
      * - Light street map background with building blocks, blue-gray avenues & angled street labels
-     * - Prominent red teardrop pin in center
-     * - Multicolored "Google" logo at the bottom-left/center
+     * - Proportional red teardrop pin in center (pinHeight = mapHeight * 0.25f)
+     * - Multicolored "Google" logo at the bottom with 4dp-equivalent bottom margin
      */
     private fun renderTemplate2StreetMiniMap(
         baseTile: Bitmap?,
@@ -231,19 +224,20 @@ class MapTileFetcher(private val context: Context) {
             drawProceduralLightStreetMap(canvas, sizePx, latitude, longitude, streetHint)
         }
 
-        // Large Red Teardrop Pin in center (matching Image 2)
+        // Red Teardrop Pin in center (pinHeight = mapHeight * 0.25f)
+        val pinHeight = sizePx * 0.25f
         drawTeardropMapPin(
             canvas = canvas,
-            centerX = sizePx * 0.49f,
-            tipY = sizePx * 0.56f,
-            pinHeight = sizePx * 0.28f
+            centerX = sizePx * 0.50f,
+            tipY = sizePx * 0.50f + pinHeight * 0.30f,
+            pinHeight = pinHeight
         )
 
-        // Multicolored "Google" logo at bottom (matching Image 2)
+        // Multicolored "Google" logo at bottom with ~4dp bottom margin
         drawMulticoloredGoogleLogo(
             canvas = canvas,
             startX = sizePx * 0.14f,
-            baselineY = sizePx * 0.90f,
+            baselineY = sizePx * 0.93f,
             textSize = sizePx * 0.155f
         )
 

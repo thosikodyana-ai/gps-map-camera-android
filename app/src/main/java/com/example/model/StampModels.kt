@@ -160,8 +160,32 @@ data class LocationMetadata(
     val customFullAddressOverride: String = ""
 ) {
     /**
+     * Line 1 of Header for Reference Template 1:
+     * "[Kecamatan/Kota], [Provinsi]," -> e.g. "Kecamatan Brebes, Jawa Tengah,"
+     */
+    val template1HeaderLine1: String
+        get() {
+            val parts = listOf(
+                locality.ifBlank { city.ifBlank { subLocality } },
+                province
+            ).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            return if (parts.isNotEmpty()) {
+                "${parts.joinToString(", ")},"
+            } else {
+                country.ifBlank { "Indonesia" }
+            }
+        }
+
+    /**
+     * Line 2 of Header for Reference Template 1:
+     * "Indonesia" (followed by 🇮🇩 flag icon)
+     */
+    val template1HeaderLine2: String
+        get() = country.trim().ifBlank { "Indonesia" }
+
+    /**
      * Header for Reference Template 1 (Image 1 / Green Circle):
-     * "Kecamatan Brebes, Jawa Tengah, Indonesia"
+     * "Kecamatan Brebes, Jawa Tengah,\nIndonesia"
      */
     val template1Headline: String
         get() = listOf(

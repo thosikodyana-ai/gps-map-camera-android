@@ -1,6 +1,6 @@
 {
-  "summary":  "Rencana pembaruan lengkap yang mencakup:\n1. Perbaikan Proporsi Mini-Map Persegi 1:1 Anti-Gepeng (Center-Crop) & Skala Font Kartu Penuh (sesuai contoh lingkaran hijau).\n2. Optimasi Performa & Kelancaran UI (60 FPS Smooth UI): pembatasan frekuensi sensor kompas/magnetometer agar tidak memicu rekomposisi berlebih, optimasi pemuatan tile peta berbasis indeks integer (bukan tiap piksel geseran), caching ImageBitmap, dan pembatalan job render pratinjau beruntun.\n3. Fitur Pencarian Tempat/Lokasi (Search Place & Alamat) pada Peta Interaktif (Interactive Map Picker) menggunakan Android Geocoder + OpenStreetMap Nominatim Search API beserta daftar saran hasil pencarian.",
-  "updatedAt":  "2026-10-30T15:35:09.230234753Z",
+  "summary":  "Rencana pembaruan Single Source of Truth untuk Live Camera Viewfinder (Jetpack Compose) dan BitmapStampRenderer (1:1 Square Mini-Map 28% lebar stamp, Header 2 baris eksplisit, skala font 0.052f/0.034f/0.030f/0.028f, distribusi vertikal merata, serta Pin & Logo Google flat bersih).",
+  "updatedAt":  "2026-10-31T01:33:01.086328540Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

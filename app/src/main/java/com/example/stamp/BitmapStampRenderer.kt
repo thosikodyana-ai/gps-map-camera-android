@@ -14,6 +14,7 @@ import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import android.text.TextUtils
 import com.example.model.LocationMetadata
 import com.example.model.StampPosition
 import com.example.model.StampStyleConfig
@@ -39,7 +40,7 @@ object BitmapStampRenderer {
     /**
      * Pipeline Stempel:
      * 1. Rotasi diaplikasikan ke Bitmap FOTO TERLEBIH DAHULU ([rotationDegrees]).
-     * 2. Hitung ulang lebar/tinggi foto hasil rotasi (newWidth, newHeight) dan deteksi orientasi (isLandscape).
+     * 2. Hitung ulang lebar/tinggi foto hasil rotasi (newWidth, newHeight) dan deteksi orientasi.
      * 3. Gambar STAMP secara horizontal di posisi bawah (atau atas) foto hasil rotasi agar teks & peta selalu tegak lurus.
      */
     fun renderStampedBitmap(
@@ -94,30 +95,23 @@ object BitmapStampRenderer {
     }
 
     /**
-     * 1:1 Calibrated Renderer for Reference Image 1 (Brebes Satellite Style)
-     * with Adaptive Portrait & Landscape Proportions:
-     *
-     * 1. Deteksi Orientasi Foto:
-     *    val isLandscape = photoWidth > photoHeight
-     * 2. Rasio Tinggi & Margin Dinamis:
-     *    val cardHeight = photoHeight * (if (isLandscape) 0.32f else 0.215f)
-     *    val marginLeft = photoWidth * (if (isLandscape) 0.05f else 0.035f)
-     *    val marginRight = photoWidth * (if (isLandscape) 0.05f else 0.035f)
-     *    val marginBottom = photoHeight * (if (isLandscape) 0.04f else 0.025f)
-     *    val gap = photoWidth * (if (isLandscape) 0.012f else 0.015f)
-     * 3. Kotak Mini-Map (Tetap Persegi 1:1):
-     *    val mapWidth = cardHeight
-     *    val mapHeight = cardHeight
-     * 4. Kartu Teks Kanan:
-     *    val infoCardWidth = photoWidth - (marginLeft + marginRight + mapWidth + gap)
-     *    val infoCardHeight = cardHeight
-     *    val innerPadding = infoCardWidth * (if (isLandscape) 0.025f else 0.035f)
-     * 5. Skala Tipografi Adaptif:
-     *    val fontHeadline = infoCardWidth * (if (isLandscape) 0.034f else 0.046f)
-     *    val fontBody = infoCardWidth * (if (isLandscape) 0.022f else 0.030f)
-     *    val fontCoordsTime = infoCardWidth * (if (isLandscape) 0.020f else 0.028f)
-     *    val fontNote = infoCardWidth * (if (isLandscape) 0.018f else 0.026f)
-     *    val lineSpacing = fontBody * 1.2f
+     * 100% Calibrated Renderer for Reference Image 1 (Brebes Satellite Style):
+     * 1. Kunci Mini-Map Persegi Bujur Sangkar 1:1 (Anti-Lonjong):
+     *    - mapWidth = totalStampWidth * 0.28f (di Landscape dikunci agar tetap proporsional 1:1)
+     *    - mapHeight = mapWidth // Wajib bujur sangkar murni (1:1)
+     *    - cardHeight = mapHeight // Tinggi kartu teks kanan SAMA PERSIS dengan tinggi peta
+     * 2. Struktur & Skala Font Teks Kanan:
+     *    - Judul Wilayah (Header) dipecah menjadi 2 baris:
+     *      Baris 1: "[Kecamatan/Kota], [Provinsi],"
+     *      Baris 2: "Indonesia 🇮🇩"
+     *      Font Header: infoCardWidth * 0.052f (Bold, #FFFFFF)
+     *    - Alamat Lengkap & Plus Code: infoCardWidth * 0.034f (Regular, #E2E2E2, wrap 2-3 baris rapat)
+     *    - Koordinat & Jam: infoCardWidth * 0.030f (#E2E2E2)
+     *    - Note Watermark: infoCardWidth * 0.028f (#CCCCCC)
+     * 3. Distribusi Vertikal Seimbang:
+     *    - Menghitung total tinggi teks dan mendistribusikan jarak antar-blok secara merata
+     *      dari batas atas padding kartu (paddingY = ~8dp) hingga batas bawah padding kartu,
+     *      sehingga tidak ada area kosong hitam di bawah.
      */
     private fun drawReferenceTemplate1Classic(
         canvas: Canvas,
@@ -130,35 +124,43 @@ object BitmapStampRenderer {
     ) {
         val photoWidth = width.toFloat()
         val photoHeight = height.toFloat()
-
-        // 1. Deteksi Orientasi Foto
         val isLandscape = photoWidth > photoHeight
         val showMap = styleConfig.showMiniMap && miniMapBitmap != null
 
-        // 2. Rasio Tinggi & Margin Dinamis
-        val cardHeight = photoHeight * (if (isLandscape) 0.32f else 0.215f)
-        val marginLeft = photoWidth * (if (isLandscape) 0.05f else 0.035f)
-        val marginRight = photoWidth * (if (isLandscape) 0.05f else 0.035f)
-        val marginBottom = photoHeight * (if (isLandscape) 0.04f else 0.025f)
-        val gap = photoWidth * (if (isLandscape) 0.012f else 0.015f)
+        val marginLeft = photoWidth * (if (isLandscape) 0.035f else 0.022f)
+        val marginRight = photoWidth * (if (isLandscape) 0.035f else 0.022f)
+        val marginBottom = photoHeight * (if (isLandscape) 0.028f else 0.018f)
+        val gap = photoWidth * 0.014f
 
-        // 3. Kotak Mini-Map (Tetap Persegi 1:1)
-        val mapWidth = if (showMap) cardHeight else 0f
-        val mapHeight = cardHeight
+        val totalStampWidth = photoWidth - (marginLeft + marginRight)
 
-        // 4. Kartu Teks Kanan
+        // 1. Kunci Mini-Map Persegi Bujur Sangkar 1:1 (Anti-Lonjong)
+        val squareSize = if (isLandscape) {
+            (totalStampWidth * 0.28f).coerceAtMost(photoHeight * 0.32f)
+        } else {
+            totalStampWidth * 0.28f
+        }
+        val mapWidth = if (showMap) squareSize else 0f
+        val mapHeight = squareSize
+        val cardHeight = mapHeight // Tinggi kartu teks kanan SAMA PERSIS dengan tinggi peta
+
         val infoCardLeft = if (showMap) marginLeft + mapWidth + gap else marginLeft
         val infoCardRight = photoWidth - marginRight
-        val infoCardWidth = (infoCardRight - infoCardLeft).coerceAtLeast(photoWidth * 0.45f)
-        val infoCardHeight = cardHeight
-        var innerPadding = infoCardWidth * (if (isLandscape) 0.025f else 0.035f)
+        val infoCardWidth = (infoCardRight - infoCardLeft).coerceAtLeast(photoWidth * 0.50f)
 
-        // 5. Skala Tipografi Adaptif
-        var fontHeadline = infoCardWidth * (if (isLandscape) 0.034f else 0.046f)
-        var fontBody = infoCardWidth * (if (isLandscape) 0.022f else 0.030f)
-        var fontCoordsTime = infoCardWidth * (if (isLandscape) 0.020f else 0.028f)
-        var fontNote = infoCardWidth * (if (isLandscape) 0.018f else 0.026f)
+        // Padding kartu setara ~8dp vertikal & horizontal
+        var paddingY = cardHeight * 0.055f
+        var paddingX = infoCardWidth * 0.026f
 
+        // 2. Skala Font sesuai spesifikasi
+        var fontHeader = infoCardWidth * 0.052f
+        var fontAddress = infoCardWidth * 0.034f
+        var fontCoordsTime = infoCardWidth * 0.030f
+        var fontNote = infoCardWidth * 0.028f
+
+        val headerLine1Raw = location.template1HeaderLine1
+        val headerLine2Raw = location.template1HeaderLine2
+        val fullAddressRaw = location.template1FullAddressWithPlusCode
         val latLongLine = location.template1LatLongText
         val dateTimeLine = timeConfig.formatTemplate1Timestamp()
         val noteLine = if (styleConfig.showProjectNote && location.projectNote.isNotBlank()) {
@@ -170,102 +172,100 @@ object BitmapStampRenderer {
         } else {
             ""
         }
+        val hasNote = noteLine.isNotEmpty()
 
-        val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            textSize = fontHeadline
+        val headerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#FFFFFF")
+            textSize = fontHeader
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
         }
-        val bodyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(244, 246, 249)
-            textSize = fontBody
+        val addressPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#E2E2E2")
+            textSize = fontAddress
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
         val coordsTimePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(244, 246, 249)
+            color = Color.parseColor("#E2E2E2")
             textSize = fontCoordsTime
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
         val notePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(244, 246, 249)
+            color = Color.parseColor("#CCCCCC")
             textSize = fontNote
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
 
-        var textMaxWidth = (infoCardWidth - innerPadding * 2f).toInt().coerceAtLeast(160)
-        var headlineLayout = createAdaptiveStaticLayout(
-            text = location.template1Headline,
-            textPaint = titlePaint,
+        var textMaxWidth = (infoCardWidth - paddingX * 2f).toInt().coerceAtLeast(160)
+        var addressLayout = createTightStaticLayout(
+            text = fullAddressRaw,
+            textPaint = addressPaint,
             maxWidth = textMaxWidth,
             lineSpacingMultiplier = 1.08f,
-            maxLines = 2
-        )
-        var addressLayout = createAdaptiveStaticLayout(
-            text = location.template1FullAddressWithPlusCode,
-            textPaint = bodyPaint,
-            maxWidth = textMaxWidth,
-            lineSpacingMultiplier = 1.15f,
             maxLines = 3
         )
 
-        var coordsStep = fontCoordsTime * 1.20f
-        var noteStep = if (noteLine.isNotEmpty()) fontNote * 1.20f else 0f
-        var sectionGap = (fontBody * 0.22f).coerceAtLeast(2f)
+        var headerLineHeight = fontHeader * 1.12f
+        var headerBlockHeight = headerLineHeight * 2f
+        var coordsLineHeight = fontCoordsTime * 1.12f
+        var noteLineHeight = if (hasNote) fontNote * 1.12f else 0f
 
-        var totalTextHeight = headlineLayout.height + sectionGap +
-            addressLayout.height + sectionGap +
-            (coordsStep * 2f) + noteStep
+        val numGaps = if (hasNote) 4 else 3
+        val minGap = cardHeight * 0.015f
+        val usableCardHeight = cardHeight - (paddingY * 2f)
 
-        val maxInnerHeight = (infoCardHeight - innerPadding * 1.6f).coerceAtLeast(infoCardHeight * 0.72f)
-        if (totalTextHeight > maxInnerHeight) {
-            val fitScale = (maxInnerHeight / totalTextHeight).coerceIn(0.68f, 1.0f)
-            innerPadding *= fitScale
-            fontHeadline *= fitScale
-            fontBody *= fitScale
+        var sumBlockHeights = headerBlockHeight +
+            addressLayout.height +
+            (coordsLineHeight * 2f) +
+            noteLineHeight
+
+        // Jika teks terlalu tinggi untuk cardHeight (= mapHeight), sesuaikan skala font agar tetap muat 100%
+        if (sumBlockHeights + (minGap * numGaps) > usableCardHeight) {
+            val fitScale = ((usableCardHeight - minGap * numGaps) / sumBlockHeights).coerceIn(0.68f, 1.0f)
+            fontHeader *= fitScale
+            fontAddress *= fitScale
             fontCoordsTime *= fitScale
             fontNote *= fitScale
-            sectionGap *= fitScale
 
-            titlePaint.textSize = fontHeadline
-            bodyPaint.textSize = fontBody
+            headerPaint.textSize = fontHeader
+            addressPaint.textSize = fontAddress
             coordsTimePaint.textSize = fontCoordsTime
             notePaint.textSize = fontNote
 
-            textMaxWidth = (infoCardWidth - innerPadding * 2f).toInt().coerceAtLeast(160)
-            headlineLayout = createAdaptiveStaticLayout(
-                text = location.template1Headline,
-                textPaint = titlePaint,
+            addressLayout = createTightStaticLayout(
+                text = fullAddressRaw,
+                textPaint = addressPaint,
                 maxWidth = textMaxWidth,
                 lineSpacingMultiplier = 1.08f,
-                maxLines = 2
-            )
-            addressLayout = createAdaptiveStaticLayout(
-                text = location.template1FullAddressWithPlusCode,
-                textPaint = bodyPaint,
-                maxWidth = textMaxWidth,
-                lineSpacingMultiplier = 1.15f,
                 maxLines = 3
             )
-            coordsStep = fontCoordsTime * 1.20f
-            noteStep = if (noteLine.isNotEmpty()) fontNote * 1.20f else 0f
-            totalTextHeight = headlineLayout.height + sectionGap +
-                addressLayout.height + sectionGap +
-                (coordsStep * 2f) + noteStep
+
+            headerLineHeight = fontHeader * 1.12f
+            headerBlockHeight = headerLineHeight * 2f
+            coordsLineHeight = fontCoordsTime * 1.12f
+            noteLineHeight = if (hasNote) fontNote * 1.12f else 0f
+
+            sumBlockHeights = headerBlockHeight +
+                addressLayout.height +
+                (coordsLineHeight * 2f) +
+                noteLineHeight
         }
 
+        // 3. Distribusi Vertikal Seimbang dari batas atas paddingY hingga batas bawah paddingY
+        val balancedGap = ((usableCardHeight - sumBlockHeights) / numGaps.toFloat()).coerceAtLeast(minGap)
+
         val cardRadius = cardHeight * 0.065f
-        val badgeTabHeight = if (styleConfig.showBrandBadgeTab) cardHeight * 0.165f else 0f
+        val badgeTabHeight = if (styleConfig.showBrandBadgeTab) cardHeight * 0.16f else 0f
 
         val cardTop = if (styleConfig.position == StampPosition.BOTTOM) {
-            photoHeight - marginBottom - infoCardHeight
+            photoHeight - marginBottom - cardHeight
         } else {
             marginBottom + badgeTabHeight
         }
-        val cardBottom = cardTop + infoCardHeight
+        val cardBottom = cardTop + cardHeight
 
         val bgAlpha = (styleConfig.backgroundOpacity.coerceIn(0.40f, 0.95f) * 255).roundToInt()
         val cardBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(bgAlpha, 42, 44, 48)
+            color = Color.argb(bgAlpha, 40, 42, 46)
             style = Paint.Style.FILL
         }
 
@@ -273,7 +273,7 @@ object BitmapStampRenderer {
         if (styleConfig.showBrandBadgeTab) {
             val badgeTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE
-                textSize = fontNote * 0.92f
+                textSize = fontNote * 0.90f
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             }
             val label = "GPS Map Camera"
@@ -308,7 +308,7 @@ object BitmapStampRenderer {
             )
         }
 
-        // Draw Right Info Card
+        // Draw Right Info Card (cardHeight == mapHeight)
         val infoCardRect = RectF(infoCardLeft, cardTop, infoCardRight, cardBottom)
         canvas.drawRoundRect(infoCardRect, cardRadius, cardRadius, cardBgPaint)
 
@@ -324,63 +324,79 @@ object BitmapStampRenderer {
             canvas.restoreToCount(saveCount)
         }
 
-        // Distribute vertical space cleanly inside the locked cardHeight
-        val extraVerticalSpace = (infoCardHeight - innerPadding * 2f - totalTextHeight).coerceAtLeast(0f)
-        val dynamicGap = sectionGap + (extraVerticalSpace * 0.25f)
-        val lineStepBoost = (extraVerticalSpace * 0.50f) / 3f
+        // Draw Vertically Balanced Text Content inside Right Card
+        val textX = infoCardLeft + paddingX
+        var currentTopY = cardTop + paddingY
 
-        val textX = infoCardLeft + innerPadding
-        var cursorY = cardTop + ((infoCardHeight - (totalTextHeight + extraVerticalSpace * 0.75f)) / 2f)
-            .coerceAtLeast(innerPadding * 0.75f)
+        // Baris 1 Header: "[Kecamatan/Kota], [Provinsi],"
+        val headerLine1Text = TextUtils.ellipsize(
+            headerLine1Raw,
+            headerPaint,
+            textMaxWidth.toFloat(),
+            TextUtils.TruncateAt.END
+        ).toString()
+        val line1BaselineY = currentTopY - headerPaint.ascent() * 0.88f
+        canvas.drawText(headerLine1Text, textX, line1BaselineY, headerPaint)
 
-        // 1. Headline (Wilayah/Kecamatan + Provinsi + Negara)
-        canvas.save()
-        canvas.translate(textX, cursorY)
-        headlineLayout.draw(canvas)
-        canvas.restore()
+        // Baris 2 Header: "Indonesia 🇮🇩"
+        val line2TopY = currentTopY + headerLineHeight
+        val line2BaselineY = line2TopY - headerPaint.ascent() * 0.88f
+        val headerLine2Text = TextUtils.ellipsize(
+            headerLine2Raw,
+            headerPaint,
+            (textMaxWidth - fontHeader * 1.2f).coerceAtLeast(80f),
+            TextUtils.TruncateAt.END
+        ).toString()
+        canvas.drawText(headerLine2Text, textX, line2BaselineY, headerPaint)
 
-        // Country Flag (🇮🇩 Red & White) right after the last line of headline
-        if (location.showCountryFlag && headlineLayout.lineCount > 0) {
-            val lastLineIdx = headlineLayout.lineCount - 1
-            val lastLineWidth = headlineLayout.getLineWidth(lastLineIdx)
-            val lastLineTop = cursorY + headlineLayout.getLineTop(lastLineIdx)
-            val lastLineBottom = cursorY + headlineLayout.getLineBottom(lastLineIdx)
-            val flagW = titlePaint.textSize * 0.88f
-            val flagH = titlePaint.textSize * 0.60f
-            val flagLeft = (textX + lastLineWidth + infoCardWidth * 0.014f)
-                .coerceAtMost(infoCardRight - innerPadding - flagW)
-            val flagTop = lastLineTop + (lastLineBottom - lastLineTop - flagH) * 0.52f
+        if (location.showCountryFlag) {
+            val line2Width = headerPaint.measureText(headerLine2Text)
+            val flagW = fontHeader * 0.90f
+            val flagH = fontHeader * 0.62f
+            val flagLeft = (textX + line2Width + infoCardWidth * 0.015f)
+                .coerceAtMost(infoCardRight - paddingX - flagW)
+            val flagTop = line2BaselineY - flagH * 0.86f
             drawIndonesianFlag(canvas, flagLeft, flagTop, flagW, flagH)
         }
 
-        cursorY += headlineLayout.height + dynamicGap
+        currentTopY += headerBlockHeight + balancedGap
 
-        // 2. Plus Code + Full Address block (line-height ~1.2x)
+        // Blok 2: Alamat Lengkap & Plus Code (2 - 3 baris rapat, #E2E2E2)
         canvas.save()
-        canvas.translate(textX, cursorY)
+        canvas.translate(textX, currentTopY)
         addressLayout.draw(canvas)
         canvas.restore()
 
-        // 3. Coordinates & Timestamp
-        cursorY += addressLayout.height + dynamicGap + coordsTimePaint.textSize * 0.90f
-        canvas.drawText(latLongLine, textX, cursorY, coordsTimePaint)
+        currentTopY += addressLayout.height + balancedGap
 
-        cursorY += coordsStep + lineStepBoost
-        canvas.drawText(dateTimeLine, textX, cursorY, coordsTimePaint)
+        // Blok 3: Koordinat Lat/Long (#E2E2E2)
+        val latLongBaselineY = currentTopY - coordsTimePaint.ascent() * 0.88f
+        canvas.drawText(latLongLine, textX, latLongBaselineY, coordsTimePaint)
 
-        // 4. Note
-        if (noteLine.isNotEmpty()) {
-            cursorY += noteStep + lineStepBoost
-            canvas.drawText(noteLine, textX, cursorY, notePaint)
+        currentTopY += coordsLineHeight + balancedGap
+
+        // Blok 4: Tanggal & Jam (#E2E2E2)
+        val dateTimeBaselineY = currentTopY - coordsTimePaint.ascent() * 0.88f
+        canvas.drawText(dateTimeLine, textX, dateTimeBaselineY, coordsTimePaint)
+
+        // Blok 5: Note Watermark (#CCCCCC)
+        if (hasNote) {
+            currentTopY += coordsLineHeight + balancedGap
+            val noteBaselineY = currentTopY - notePaint.ascent() * 0.88f
+            val fittedNote = TextUtils.ellipsize(
+                noteLine,
+                notePaint,
+                textMaxWidth.toFloat(),
+                TextUtils.TruncateAt.END
+            ).toString()
+            canvas.drawText(fittedNote, textX, noteBaselineY, notePaint)
         }
     }
 
     /**
-     * 1:1 Calibrated Renderer for Reference Image 2 (Street Map + Telemetry Sensor Icons)
-     * using the exact same Adaptive Portrait & Landscape Proportions:
-     * - cardHeight = photoHeight * (if (isLandscape) 0.32f else 0.215f)
-     * - 1:1 Square Mini-Map (mapWidth = cardHeight, mapHeight = cardHeight)
-     * - Adaptive margins, innerPadding, and typography scale
+     * 100% Calibrated Renderer for Reference Image 2 (Street Map + Telemetry Sensor Icons)
+     * with 1:1 Pure Square Mini-Map (mapWidth = totalStampWidth * 0.28f, mapHeight = mapWidth, cardHeight = mapHeight)
+     * and balanced vertical text distribution.
      */
     private fun drawReferenceTemplate2Telemetry(
         canvas: Canvas,
@@ -393,81 +409,83 @@ object BitmapStampRenderer {
     ) {
         val photoWidth = width.toFloat()
         val photoHeight = height.toFloat()
-
         val isLandscape = photoWidth > photoHeight
         val showMap = styleConfig.showMiniMap && miniMapBitmap != null
 
-        val cardHeight = photoHeight * (if (isLandscape) 0.32f else 0.215f)
-        val marginLeft = photoWidth * (if (isLandscape) 0.05f else 0.035f)
-        val marginRight = photoWidth * (if (isLandscape) 0.05f else 0.035f)
-        val marginBottom = photoHeight * (if (isLandscape) 0.04f else 0.025f)
-        val gap = photoWidth * (if (isLandscape) 0.012f else 0.015f)
+        val marginLeft = photoWidth * (if (isLandscape) 0.035f else 0.022f)
+        val marginRight = photoWidth * (if (isLandscape) 0.035f else 0.022f)
+        val marginBottom = photoHeight * (if (isLandscape) 0.028f else 0.018f)
+        val gap = photoWidth * 0.014f
 
-        val mapWidth = if (showMap) cardHeight else 0f
-        val mapHeight = cardHeight
+        val totalStampWidth = photoWidth - (marginLeft + marginRight)
+        val squareSize = if (isLandscape) {
+            (totalStampWidth * 0.28f).coerceAtMost(photoHeight * 0.32f)
+        } else {
+            totalStampWidth * 0.28f
+        }
+        val mapWidth = if (showMap) squareSize else 0f
+        val mapHeight = squareSize
+        val cardHeight = mapHeight
 
         val infoCardLeft = if (showMap) marginLeft + mapWidth + gap else marginLeft
         val infoCardRight = photoWidth - marginRight
-        val infoCardWidth = (infoCardRight - infoCardLeft).coerceAtLeast(photoWidth * 0.45f)
-        val infoCardHeight = cardHeight
-        var innerPadding = infoCardWidth * (if (isLandscape) 0.025f else 0.035f)
+        val infoCardWidth = (infoCardRight - infoCardLeft).coerceAtLeast(photoWidth * 0.50f)
 
-        var fontHeadline = infoCardWidth * (if (isLandscape) 0.032f else 0.042f)
-        var fontRow = infoCardWidth * (if (isLandscape) 0.020f else 0.028f)
-        var headerGap = fontRow * 0.35f
+        val paddingY = cardHeight * 0.055f
+        val paddingX = infoCardWidth * 0.026f
+
+        var fontHeadline = infoCardWidth * 0.044f
+        var fontRow = infoCardWidth * 0.030f
 
         val headerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
+            color = Color.parseColor("#FFFFFF")
             textSize = fontHeadline
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
         }
         val rowPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
+            color = Color.parseColor("#E2E2E2")
             textSize = fontRow
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
 
-        var textMaxWidth = (infoCardWidth - innerPadding * 2f).toInt().coerceAtLeast(160)
-        var headerLayout = createAdaptiveStaticLayout(
+        val textMaxWidth = (infoCardWidth - paddingX * 2f).toInt().coerceAtLeast(160)
+        var headerLayout = createTightStaticLayout(
             text = location.template2AddressHeader,
             textPaint = headerPaint,
             maxWidth = textMaxWidth,
-            lineSpacingMultiplier = 1.12f,
+            lineSpacingMultiplier = 1.08f,
             maxLines = 2
         )
-        var rowStep = fontRow * 1.25f
-        var totalTextHeight = headerLayout.height + headerGap + (rowStep * 4f)
+        var rowLineHeight = fontRow * 1.14f
+        val usableCardHeight = cardHeight - paddingY * 2f
+        val minGap = cardHeight * 0.015f
+        var sumBlocks = headerLayout.height + (rowLineHeight * 4f)
 
-        val maxInnerHeight = (infoCardHeight - innerPadding * 1.6f).coerceAtLeast(infoCardHeight * 0.72f)
-        if (totalTextHeight > maxInnerHeight) {
-            val fitScale = (maxInnerHeight / totalTextHeight).coerceIn(0.68f, 1.0f)
-            innerPadding *= fitScale
+        if (sumBlocks + minGap * 4f > usableCardHeight) {
+            val fitScale = ((usableCardHeight - minGap * 4f) / sumBlocks).coerceIn(0.68f, 1.0f)
             fontHeadline *= fitScale
             fontRow *= fitScale
-            headerGap *= fitScale
-
             headerPaint.textSize = fontHeadline
             rowPaint.textSize = fontRow
-            rowStep = fontRow * 1.25f
-
-            textMaxWidth = (infoCardWidth - innerPadding * 2f).toInt().coerceAtLeast(160)
-            headerLayout = createAdaptiveStaticLayout(
+            headerLayout = createTightStaticLayout(
                 text = location.template2AddressHeader,
                 textPaint = headerPaint,
                 maxWidth = textMaxWidth,
-                lineSpacingMultiplier = 1.12f,
+                lineSpacingMultiplier = 1.08f,
                 maxLines = 2
             )
-            totalTextHeight = headerLayout.height + headerGap + (rowStep * 4f)
+            rowLineHeight = fontRow * 1.14f
+            sumBlocks = headerLayout.height + (rowLineHeight * 4f)
         }
 
-        val cardRadius = cardHeight * 0.075f
+        val balancedGap = ((usableCardHeight - sumBlocks) / 4f).coerceAtLeast(minGap)
+        val cardRadius = cardHeight * 0.065f
         val cardTop = if (styleConfig.position == StampPosition.BOTTOM) {
-            photoHeight - marginBottom - infoCardHeight
+            photoHeight - marginBottom - cardHeight
         } else {
             marginBottom
         }
-        val cardBottom = cardTop + infoCardHeight
+        val cardBottom = cardTop + cardHeight
 
         val bgAlpha = (styleConfig.backgroundOpacity.coerceIn(0.40f, 0.95f) * 255).roundToInt()
         val cardBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -491,69 +509,69 @@ object BitmapStampRenderer {
         val infoRect = RectF(infoCardLeft, cardTop, infoCardRight, cardBottom)
         canvas.drawRoundRect(infoRect, cardRadius, cardRadius, cardBgPaint)
 
-        // 3. Distribute Telemetry Content Inside Right Card
-        val extraSpace = (infoCardHeight - innerPadding * 2f - totalTextHeight).coerceAtLeast(0f)
-        val boostedRowStep = rowStep + (extraSpace * 0.65f) / 4f
-        val boostedHeaderGap = headerGap + (extraSpace * 0.25f)
-
-        val startX = infoCardLeft + innerPadding
-        val cursorY = cardTop + ((infoCardHeight - (headerLayout.height + boostedHeaderGap + boostedRowStep * 4f)) / 2f)
-            .coerceAtLeast(innerPadding * 0.75f)
+        // 3. Draw Vertically Balanced Telemetry Content
+        val startX = infoCardLeft + paddingX
+        var currentTopY = cardTop + paddingY
 
         canvas.save()
-        canvas.translate(startX, cursorY)
+        canvas.translate(startX, currentTopY)
         headerLayout.draw(canvas)
         canvas.restore()
 
+        currentTopY += headerLayout.height + balancedGap
+
         val iconRadius = rowPaint.textSize * 0.40f
         val textOffsetAfterIcon = iconRadius * 2.6f
-        var rowBaselineY = cursorY + headerLayout.height + boostedHeaderGap + rowPaint.textSize * 0.88f
+        val iconCenterX = startX + iconRadius
 
         // Row 1: Crosshair Icon + Comma Coordinates
-        val iconCenterX = startX + iconRadius
+        val row1Baseline = currentTopY - rowPaint.ascent() * 0.88f
         drawCrosshairTargetIcon(
             canvas = canvas,
             cx = iconCenterX,
-            cy = rowBaselineY - rowPaint.textSize * 0.34f,
+            cy = row1Baseline - rowPaint.textSize * 0.34f,
             r = iconRadius
         )
-        canvas.drawText(location.template2CommaCoordText, startX + textOffsetAfterIcon, rowBaselineY, rowPaint)
+        canvas.drawText(location.template2CommaCoordText, startX + textOffsetAfterIcon, row1Baseline, rowPaint)
 
         // Row 2: Clock Icon + Timestamp
-        rowBaselineY += boostedRowStep
+        currentTopY += rowLineHeight + balancedGap
+        val row2Baseline = currentTopY - rowPaint.ascent() * 0.88f
         drawClockVectorIcon(
             canvas = canvas,
             cx = iconCenterX,
-            cy = rowBaselineY - rowPaint.textSize * 0.34f,
+            cy = row2Baseline - rowPaint.textSize * 0.34f,
             r = iconRadius
         )
-        canvas.drawText(timeConfig.formatTemplate2Timestamp(), startX + textOffsetAfterIcon, rowBaselineY, rowPaint)
+        canvas.drawText(timeConfig.formatTemplate2Timestamp(), startX + textOffsetAfterIcon, row2Baseline, rowPaint)
 
         // Row 3: Elevation Icon + Altitude
-        rowBaselineY += boostedRowStep
+        currentTopY += rowLineHeight + balancedGap
+        val row3Baseline = currentTopY - rowPaint.ascent() * 0.88f
         drawElevationPeakIcon(
             canvas = canvas,
             cx = iconCenterX,
-            cy = rowBaselineY - rowPaint.textSize * 0.34f,
+            cy = row3Baseline - rowPaint.textSize * 0.34f,
             r = iconRadius
         )
-        canvas.drawText(location.template2AltitudeText, startX + textOffsetAfterIcon, rowBaselineY, rowPaint)
+        canvas.drawText(location.template2AltitudeText, startX + textOffsetAfterIcon, row3Baseline, rowPaint)
 
         // Row 4: 3 Sensor Columns ("±m akurasi" | "µT" | "N")
-        rowBaselineY += boostedRowStep
-        val iconCenterY = rowBaselineY - rowPaint.textSize * 0.34f
-        val usableInnerW = infoCardWidth - innerPadding * 2f
+        currentTopY += rowLineHeight + balancedGap
+        val row4Baseline = currentTopY - rowPaint.ascent() * 0.88f
+        val iconCenterY = row4Baseline - rowPaint.textSize * 0.34f
+        val usableInnerW = infoCardWidth - paddingX * 2f
 
         drawCrosshairTargetIcon(canvas, iconCenterX, iconCenterY, iconRadius)
-        canvas.drawText(location.template2AccuracyText, startX + textOffsetAfterIcon, rowBaselineY, rowPaint)
+        canvas.drawText(location.template2AccuracyText, startX + textOffsetAfterIcon, row4Baseline, rowPaint)
 
         val col2X = startX + usableInnerW * 0.44f
         drawMagneticWaveIcon(canvas, col2X + iconRadius, iconCenterY, iconRadius)
-        canvas.drawText(location.template2MagneticText, col2X + textOffsetAfterIcon, rowBaselineY, rowPaint)
+        canvas.drawText(location.template2MagneticText, col2X + textOffsetAfterIcon, row4Baseline, rowPaint)
 
         val col3X = startX + usableInnerW * 0.77f
         drawCompassVectorIcon(canvas, col3X + iconRadius, iconCenterY, iconRadius)
-        canvas.drawText(location.template2CompassText, col3X + textOffsetAfterIcon, rowBaselineY, rowPaint)
+        canvas.drawText(location.template2CompassText, col3X + textOffsetAfterIcon, row4Baseline, rowPaint)
     }
 
     private fun drawMinimalistStamp(
@@ -568,10 +586,10 @@ object BitmapStampRenderer {
         val photoWidth = width.toFloat()
         val photoHeight = height.toFloat()
         val isLandscape = photoWidth > photoHeight
-        val marginX = photoWidth * (if (isLandscape) 0.05f else 0.035f)
-        val marginY = photoHeight * (if (isLandscape) 0.04f else 0.025f)
+        val marginX = photoWidth * (if (isLandscape) 0.035f else 0.022f)
+        val marginY = photoHeight * (if (isLandscape) 0.028f else 0.018f)
         val totalW = photoWidth - marginX * 2f
-        val pad = totalW * 0.022f
+        val pad = totalW * 0.020f
         val cornerRadius = totalW * 0.018f
 
         val mapSize = if (styleConfig.showMiniMap && miniMapBitmap != null) {
@@ -586,7 +604,7 @@ object BitmapStampRenderer {
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         }
         val addrPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
+            color = Color.parseColor("#E5E5E5")
             textSize = totalW * (if (isLandscape) 0.019f else 0.024f)
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
         }
@@ -598,7 +616,7 @@ object BitmapStampRenderer {
 
         val textLeft = marginX + if (mapSize > 0) mapSize + pad * 1.2f else pad
         val textMaxWidth = (photoWidth - marginX - pad - textLeft).toInt().coerceAtLeast(180)
-        val addrLayout = createAdaptiveStaticLayout(location.fullAddress, addrPaint, textMaxWidth, 1.15f, maxLines = 2)
+        val addrLayout = createTightStaticLayout(location.fullAddress, addrPaint, textMaxWidth, 1.12f, maxLines = 2)
 
         val lineGap = totalW * 0.006f
         val cardHeight = (pad * 2f + timePaint.textSize + lineGap + addrLayout.height + lineGap + coordPaint.textSize)
@@ -770,18 +788,19 @@ object BitmapStampRenderer {
         canvas.drawPath(diamond, cutoutPaint)
     }
 
-    private fun createAdaptiveStaticLayout(
+    private fun createTightStaticLayout(
         text: String,
         textPaint: TextPaint,
         maxWidth: Int,
-        lineSpacingMultiplier: Float = 1.15f,
-        maxLines: Int = 2
+        lineSpacingMultiplier: Float = 1.08f,
+        maxLines: Int = 3
     ): StaticLayout {
         return StaticLayout.Builder
             .obtain(text, 0, text.length, textPaint, maxWidth)
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setLineSpacing(0f, lineSpacingMultiplier)
             .setIncludePad(false)
+            .setEllipsize(TextUtils.TruncateAt.END)
             .setMaxLines(maxLines)
             .build()
     }
